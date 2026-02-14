@@ -1,7 +1,16 @@
 exports.handler = async function(event) {
   const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
-  const { message } = JSON.parse(event.body);
+  let message = "Hello";
+
+  if (event.body) {
+    try {
+      const parsed = JSON.parse(event.body);
+      message = parsed.message || "Hello";
+    } catch (err) {
+      message = "Hello";
+    }
+  }
 
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
@@ -22,8 +31,11 @@ exports.handler = async function(event) {
 
   return {
     statusCode: 200,
+    headers: {
+      "Content-Type": "application/json"
+    },
     body: JSON.stringify({
-      reply: data.choices[0].message.content
+      reply: data.choices?.[0]?.message?.content || "No response"
     })
   };
 };

@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Effie</title>
+  <style>
+    :root{
+      --bg:#000000;
+      --gold:#cdae75;
+      --border: rgba(205,174,117,.35);
+      --panel: rgba(255,255,255,.04);
+
+      --effieBubble: rgba(255,255,255,.05);
+      --userBubble: rgba(13, 22, 40, .92); /* dark navy */
+      --userText:#ffffff;
+      --effieText: var(--gold);
+
+      --inputBg: rgba(255,255,255,.06);
+      --btnBg: var(--gold);
+      --btnText: #1a1a1a;
+    }
+
+    *{ box-sizing:border-box; }
+    html,body{ height:100%; }
+    body{
+      margin:0;
+      background:var(--bg);
+      color:var(--gold);
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+      -webkit-font-smoothing:antialiased;
+      overflow:hidden; /* during intro */
+    }
+
+    /* Fullscreen layers */
+    .stage{
+      position:fixed;
+      inset:0;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
+               max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+    }
+
+    /* INTRO */
+    #intro{
+      opacity:1;
+      transition: opacity 700ms ease;
+    }
+    .intro-wrap{
+      width:min(520px, 100%);
+      height:min(720px, 100%);
+      border:1px solid var(--border);
+      border-radius:14px;
+      background:linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.01));
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      overflow:hidden;
+      position:relative;
+    }
+    .intro-video{
+      width:100%;
+      height:100%;
+      object-fit:cover;
+      display:block;
+      filter: contrast(1.05) saturate(1.05);
+    }
+    .intro-skip{
+      position:absolute;
+      bottom:14px;
+      right:14px;
+      padding:10px 12px;
+      border-radius:10px;
+      border:1px solid var(--border);
+      background: rgba(0,0,0,.45);
+      color: var(--gold);
+      font-size:14px;
+      cursor:pointer;
+    }
+    .intro-skip:active{ transform: translateY(1px); }
+
+    /* CHAT */
+    #chat{
+      display:none;
+      opacity:0;
+      transition: opacity 700ms ease;
+    }
+
+    .chat-shell{
+      width:min(520px, 100%);
+      height:min(720px, 100%);
+      border:1px solid var(--border);
+      border-radius:14px;
+      background: rgba(255,255,255,.02);
+      display:flex;
+      flex-direction:column;
+      overflow:hidden;
+    }
+
+    .chat-header{
+      padding:14px 16px;
+      border-bottom:1px solid var(--border);
+      text-align:center;
+      letter-spacing:.22em;
+      font-weight:600;
+      font-size:14px;
+    }
+
+    .chat-body{
+      flex:1;
+      padding:14px 14px 10px;
+      overflow:auto;
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+    }
+
+    /* bubbles */
+    .msg{
+      max-width: 85%;
+      padding:10px 12px;
+      border-radius:14px;
+      line-height:1.35;
+      font-size: clamp(15px, 4.2vw, 17px);
+      border:1px solid rgba(255,255,255,.06);
+      box-shadow: 0 8px 24px rgba(0,0,0,.25);
+      white-space:pre-wrap;
+      word-wrap:break-word;
+    }
+    .msg.effie{
+      align-self:flex-start;
+      background: var(--effieBubble);
+      color: var(--effieText);
+      border-color: rgba(205,174,117,.18);
+    }
+    .msg.user{
+      align-self:flex-end;
+      background: var(--userBubble);
+      color: var(--userText);
+      border-color: rgba(255,255,255,.09);
+    }
+
+    /* input bar */
+    .chat-input{
+      padding:10px;
+      border-top:1px solid var(--border);
+      display:flex;
+      gap:10px;
+      background: rgba(0,0,0,.35);
+    }
+    .chat-input input{
+      flex:1;
+      height:44px;
+      border-radius:12px;
+      border:1px solid rgba(255,255,255,.10);
+      background: var(--inputBg);
+      color: var(--gold);
+      padding:0 12px;
+      font-size:16px; /* important for iOS zoom prevention */
+      outline:none;
+    }
+    .chat-input input::placeholder{
+      color: rgba(205,174,117,.55);
+    }
+    .chat-input button{
+      height:44px;
+      min-width:88px;
+      border:none;
+      border-radius:12px;
+      background: var(--btnBg);
+      color: var(--btnText);
+      font-weight:700;
+      font-size:15px;
+      cursor:pointer;
+    }
+    .chat-input button:active{ transform: translateY(1px); }
+    .chat-input button:disabled{
+      opacity:.55;
+      cursor:not-allowed;
+    }
+
+    /* Mobile-first sizing (full height) */
+    @media (max-height: 760px){
+      .intro-wrap, .chat-shell{ height:100%; }
+    }
+
+    /* On phones: feel like full-screen app (no “floating phone” look) */
+    @media (max-width: 560px){
+      .intro-wrap, .chat-shell{
+        width:100%;
+        height:100%;
+        border-radius: 0;
+      }
+      .stage{
+        padding: env(safe-area-inset-top) env(safe-area-inset-right)
+                 env(safe-area-inset-bottom) env(safe-area-inset-left);
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <!-- INTRO -->
+  <div id="intro" class="stage" aria-hidden="false">
+    <div class="intro-wrap">
+      <video
+        class="intro-video"
+        autoplay
+        muted
+        playsinline
+        preload="auto"
+      >
+        <source src="https://adilo.bigcommand.com/738d463d-1007-4047-976e-217a85184554.mp4" type="video/mp4" />
+      </video>
+
+      <button class="intro-skip" id="skipBtn" type="button">Skip</button>
+    </div>
+  </div>
+
+  <!-- CHAT -->
+  <div id="chat" class="stage" aria-hidden="true">
+    <div class="chat-shell">
+      <div class="chat-header">EFFIE</div>
+
+      <div class="chat-body" id="chatBody">
+        <div class="msg effie">Hi. I'm here. You don't need to explain everything.</div>
+      </div>
+
+      <div class="chat-input">
+        <input id="userInput" type="text" placeholder="Say anything..." autocomplete="off" />
+        <button id="sendBtn" type="button" disabled>Send</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const INTRO_MS = 5000; // 5s
+    const FADE_MS  = 700;
+
+    const intro = document.getElementById('intro');
+    const chat  = document.getElementById('chat');
+
+    const chatBody = document.getElementById('chatBody');
+    const input = document.getElementById('userInput');
+    const sendBtn = document.getElementById('sendBtn');
+    const skipBtn = document.getElementById('skipBtn');
+
+    let switched = false;
+
+    function setSendEnabled() {
+      sendBtn.disabled = input.value.trim().length === 0;
+    }
+
+    input.addEventListener('input', setSendEnabled);
+
+    function addUserMessage(text){
+      const el = document.createElement('div');
+      el.className = 'msg user';
+      el.textContent = text;
+      chatBody.appendChild(el);
+      chatBody.scrollTop = chatBody.scrollHeight;
+    }
+
+    function addEffieMessage(text){
+      const el = document.createElement('div');
+      el.className = 'msg effie';
+      el.textContent = text;
+      chatBody.appendChild(el);
+      chatBody.scrollTop = chatBody.scrollHeight;
+    }
+
+    function handleSend(){
+      const text = input.value.trim();
+      if(!text) return; // if empty: do nothing
+      addUserMessage(text);
+      input.value = '';
+      setSendEnabled();
+
+      // placeholder response (later podłączysz do prawdziwej Effie)
+      setTimeout(() => addEffieMessage("I'm listening."), 350);
+    }
+
+    sendBtn.addEventListener('click', handleSend);
+    input.addEventListener('keydown', (e) => {
+      if(e.key === 'Enter') handleSend();
+    });
+
+    function switchToChat(){
+      if(switched) return;
+      switched = true;
+
+      // Fade out intro
+      intro.style.opacity = '0';
+
+      setTimeout(() => {
+        intro.style.display = 'none';
+        intro.setAttribute('aria-hidden', 'true');
+
+        // Show chat then fade in
+        chat.style.display = 'flex';
+        chat.setAttribute('aria-hidden', 'false');
+
+        requestAnimationFrame(() => {
+          chat.style.opacity = '1';
+          document.body.style.overflow = 'auto';
+          input.focus();
+        });
+
+      }, FADE_MS);
+    }
+
+    skipBtn.addEventListener('click', switchToChat);
+
+    // Autostart
+    setTimeout(switchToChat, INTRO_MS);
+
+    // ensure initial button state
+    setSendEnabled();
+  </script>
+</body>
+</html>

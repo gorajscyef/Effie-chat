@@ -32,7 +32,6 @@
       overflow:hidden; /* during intro */
     }
 
-    /* Fullscreen layers */
     .stage{
       position:fixed;
       inset:0;
@@ -117,7 +116,6 @@
       gap:10px;
     }
 
-    /* bubbles */
     .msg{
       max-width: 85%;
       padding:10px 12px;
@@ -142,7 +140,6 @@
       border-color: rgba(255,255,255,.09);
     }
 
-    /* input bar */
     .chat-input{
       padding:10px;
       border-top:1px solid var(--border);
@@ -158,7 +155,7 @@
       background: var(--inputBg);
       color: var(--gold);
       padding:0 12px;
-      font-size:16px; /* important for iOS zoom prevention */
+      font-size:16px;
       outline:none;
     }
     .chat-input input::placeholder{
@@ -181,12 +178,10 @@
       cursor:not-allowed;
     }
 
-    /* Mobile-first sizing (full height) */
     @media (max-height: 760px){
       .intro-wrap, .chat-shell{ height:100%; }
     }
 
-    /* On phones: feel like full-screen app (no “floating phone” look) */
     @media (max-width: 560px){
       .intro-wrap, .chat-shell{
         width:100%;
@@ -205,16 +200,9 @@
   <!-- INTRO -->
   <div id="intro" class="stage" aria-hidden="false">
     <div class="intro-wrap">
-      <video
-        class="intro-video"
-        autoplay
-        muted
-        playsinline
-        preload="auto"
-      >
+      <video class="intro-video" autoplay muted playsinline preload="auto">
         <source src="https://adilo.bigcommand.com/738d463d-1007-4047-976e-217a85184554.mp4" type="video/mp4" />
       </video>
-
       <button class="intro-skip" id="skipBtn" type="button">Skip</button>
     </div>
   </div>
@@ -225,7 +213,7 @@
       <div class="chat-header">EFFIE</div>
 
       <div class="chat-body" id="chatBody">
-        <div class="msg effie">Hi. I'm here. You don't need to explain everything.</div>
+        <div class="msg effie">Hi. I'm here.</div>
       </div>
 
       <div class="chat-input">
@@ -236,7 +224,7 @@
   </div>
 
   <script>
-    const INTRO_MS = 5000; // 5s
+    const INTRO_MS = 5000;
     const FADE_MS  = 700;
 
     const intro = document.getElementById('intro');
@@ -248,9 +236,10 @@
     const skipBtn = document.getElementById('skipBtn');
 
     let switched = false;
+    let busy = false;
 
     function setSendEnabled() {
-      sendBtn.disabled = input.value.trim().length === 0;
+      sendBtn.disabled = busy || input.value.trim().length === 0;
     }
 
     input.addEventListener('input', setSendEnabled);
@@ -261,6 +250,7 @@
       el.textContent = text;
       chatBody.appendChild(el);
       chatBody.scrollTop = chatBody.scrollHeight;
+      return el;
     }
 
     function addEffieMessage(text){
@@ -269,36 +259,73 @@
       el.textContent = text;
       chatBody.appendChild(el);
       chatBody.scrollTop = chatBody.scrollHeight;
+      return el;
     }
 
-    function handleSend(){
+    function setBusy(state){
+      busy = state;
+      input.disabled = state;
+      setSendEnabled();
+      sendBtn.textContent = state ? "..." : "Send";
+    }
+
+    async function handleSend(){
       const text = input.value.trim();
-      if(!text) return; // if empty: do nothing
+      if(!text || busy) return;
+
       addUserMessage(text);
       input.value = '';
-      setSendEnabled();
+      setBusy(true);
 
-      // placeholder response (later podłączysz do prawdziwej Effie)
-      setTimeout(() => addEffieMessage("I'm listening."), 350);
+      // “typing” bubble
+      const typingEl = addEffieMessage("…");
+
+      try {
+        const res = await fetch('/.netlify/functions/effie', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: text })
+        });
+
+        // jeśli Netlify/OpenAI zwróci błąd, pokażmy go czytelnie
+        let data = {};
+        try { data = await res.json(); } catch(e) {}
+
+        if(!res.ok){
+          const msg = data?.error?.message || data?.message || `Server error (${res.status})`;
+          typingEl.textContent = msg;
+        } else {
+          typingEl.textContent = data.reply || "I'm here.";
+        }
+
+      } catch (err) {
+        console.error(err);
+        typingEl.textContent = "Connection error. Try again.";
+      } finally {
+        setBusy(false);
+        input.focus();
+      }
     }
 
     sendBtn.addEventListener('click', handleSend);
+
     input.addEventListener('keydown', (e) => {
-      if(e.key === 'Enter') handleSend();
+      if(e.key === 'Enter'){
+        e.preventDefault();
+        handleSend();
+      }
     });
 
     function switchToChat(){
       if(switched) return;
       switched = true;
 
-      // Fade out intro
       intro.style.opacity = '0';
 
       setTimeout(() => {
         intro.style.display = 'none';
         intro.setAttribute('aria-hidden', 'true');
 
-        // Show chat then fade in
         chat.style.display = 'flex';
         chat.setAttribute('aria-hidden', 'false');
 
@@ -312,11 +339,8 @@
     }
 
     skipBtn.addEventListener('click', switchToChat);
-
-    // Autostart
     setTimeout(switchToChat, INTRO_MS);
 
-    // ensure initial button state
     setSendEnabled();
   </script>
 </body>

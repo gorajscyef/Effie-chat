@@ -1,3 +1,4 @@
+
 <!doctype html>
 <html lang="en">
 <head>
@@ -238,6 +239,37 @@
     let switched = false;
     let busy = false;
 
+    // ===== Effie local memory (MVP) =====
+    const STORAGE_HISTORY_KEY = "effie_history_v1";
+    const STORAGE_LASTDATE_KEY = "effie_last_date_v1";
+
+    function todayKey() {
+      return new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    }
+
+    function loadHistory() {
+      try {
+        const raw = localStorage.getItem(STORAGE_HISTORY_KEY);
+        const arr = raw ? JSON.parse(raw) : [];
+        return Array.isArray(arr) ? arr : [];
+      } catch {
+        return [];
+      }
+    }
+
+    function saveHistory(arr) {
+      const trimmed = arr.slice(-10); // keep last 10 messages max
+      localStorage.setItem(STORAGE_HISTORY_KEY, JSON.stringify(trimmed));
+    }
+
+    function hasTalkedToday() {
+      return localStorage.getItem(STORAGE_LASTDATE_KEY) === todayKey();
+    }
+
+    function markTalkedToday() {
+      localStorage.setItem(STORAGE_LASTDATE_KEY, todayKey());
+    }
+
     function setSendEnabled() {
       sendBtn.disabled = busy || input.value.trim().length === 0;
     }
@@ -269,13 +301,35 @@
       sendBtn.textContent = state ? "..." : "Send";
     }
 
+    // OPTIONAL: render saved history when chat opens (so refresh keeps conversation)
+    function renderSavedHistory(){
+      const history = loadHistory();
+      if(!history.length) return;
+
+      // Clear current content (including default "Hi. I'm here.")
+      chatBody.innerHTML = '';
+
+      history.forEach(m => {
+        if(m.role === 'user') addUserMessage(m.content);
+        if(m.role === 'assistant') addEffieMessage(m.content);
+      });
+
+      chatBody.scrollTop = chatBody.scrollHeight;
+    }
+
     async function handleSend(){
       const text = input.value.trim();
       if(!text || busy) return;
 
+      // show user message
       addUserMessage(text);
       input.value = '';
       setBusy(true);
+
+      // store user msg
+      const h1 = loadHistory();
+      h1.push({ role: "user", content: text });
+      saveHistory(h1);
 
       // “typing” bubble
       const typingEl = addEffieMessage("…");
@@ -284,18 +338,33 @@
         const res = await fetch('/.netlify/functions/effie', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: text })
+          body: JSON.stringify({
+            message: text,
+            history: loadHistory(),
+            meta: {
+              hasTalkedToday: hasTalkedToday(),
+              today: todayKey()
+            }
+          })
         });
 
-        // jeśli Netlify/OpenAI zwróci błąd, pokażmy go czytelnie
         let data = {};
         try { data = await res.json(); } catch(e) {}
 
         if(!res.ok){
-          const msg = data?.error?.message || data?.message || `Server error (${res.status})`;
+          const msg = data?.reply || data?.error?.message || data?.message || `Server error (${res.status})`;
           typingEl.textContent = msg;
         } else {
-          typingEl.textContent = data.reply || "I'm here.";
+          const reply = data.reply || "I'm here.";
+          typingEl.textContent = reply;
+
+          // store assistant msg
+          const h2 = loadHistory();
+          h2.push({ role: "assistant", content: reply });
+          saveHistory(h2);
+
+          // mark talked today
+          markTalkedToday();
         }
 
       } catch (err) {
@@ -332,6 +401,10 @@
         requestAnimationFrame(() => {
           chat.style.opacity = '1';
           document.body.style.overflow = 'auto';
+
+          // render history only when chat is visible
+          renderSavedHistory();
+
           input.focus();
         });
 
@@ -341,6 +414,7 @@
     skipBtn.addEventListener('click', switchToChat);
     setTimeout(switchToChat, INTRO_MS);
 
+    // initial state
     setSendEnabled();
   </script>
 </body>

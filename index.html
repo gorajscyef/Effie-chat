@@ -1,313 +1,435 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Effie</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Effie</title>
+  <style>
+    :root{
+      --bg:#000000;
+      --gold:#cdae75;
+      --border: rgba(205,174,117,.35);
+      --panel: rgba(255,255,255,.04);
 
-<style>
-:root{
-  --bg:#000000;
-  --gold:#cdae75;
-  --border: rgba(205,174,117,.35);
-  --panel: rgba(255,255,255,.04);
+      --effieBubble: rgba(255,255,255,.05);
+      --userBubble: rgba(13, 22, 40, .92); /* dark navy */
+      --userText:#ffffff;
+      --effieText: var(--gold);
 
-  --effieBubble: rgba(255,255,255,.05);
-  --userBubble: rgba(13,22,40,.92);
-  --userText:#ffffff;
-  --effieText: var(--gold);
+      --inputBg: rgba(255,255,255,.06);
+      --btnBg: var(--gold);
+      --btnText: #1a1a1a;
+    }
 
-  --inputBg: rgba(255,255,255,.06);
-  --btnBg: var(--gold);
-  --btnText:#1a1a1a;
-}
+    *{ box-sizing:border-box; }
+    html,body{ height:100%; }
+    body{
+      margin:0;
+      background:var(--bg);
+      color:var(--gold);
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+      -webkit-font-smoothing:antialiased;
+      overflow:hidden; /* during intro */
+    }
 
-*{box-sizing:border-box;}
-html,body{height:100%;}
-body{
-  margin:0;
-  background:var(--bg);
-  color:var(--gold);
-  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-  overflow:hidden;
-}
+    .stage{
+      position:fixed;
+      inset:0;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
+               max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+    }
 
-.stage{
-  position:fixed;
-  inset:0;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  padding:12px;
-}
+    /* INTRO */
+    #intro{
+      opacity:1;
+      transition: opacity 700ms ease;
+    }
+    .intro-wrap{
+      width:min(520px, 100%);
+      height:min(720px, 100%);
+      border:1px solid var(--border);
+      border-radius:14px;
+      background:linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.01));
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      overflow:hidden;
+      position:relative;
+    }
+    .intro-video{
+      width:100%;
+      height:100%;
+      object-fit:cover;
+      display:block;
+      filter: contrast(1.05) saturate(1.05);
+    }
+    .intro-skip{
+      position:absolute;
+      bottom:14px;
+      right:14px;
+      padding:10px 12px;
+      border-radius:10px;
+      border:1px solid var(--border);
+      background: rgba(0,0,0,.45);
+      color: var(--gold);
+      font-size:14px;
+      cursor:pointer;
+    }
+    .intro-skip:active{ transform: translateY(1px); }
 
-/* INTRO */
-#intro{opacity:1;transition:opacity 700ms ease;}
-.intro-wrap{
-  width:min(520px,100%);
-  height:min(720px,100%);
-  border:1px solid var(--border);
-  border-radius:14px;
-  overflow:hidden;
-  position:relative;
-}
-.intro-video{
-  width:100%;
-  height:100%;
-  object-fit:cover;
-}
-.intro-skip{
-  position:absolute;
-  bottom:14px;
-  right:14px;
-  padding:10px 12px;
-  border-radius:10px;
-  border:1px solid var(--border);
-  background:rgba(0,0,0,.45);
-  color:var(--gold);
-  cursor:pointer;
-}
+    /* CHAT */
+    #chat{
+      display:none;
+      opacity:0;
+      transition: opacity 700ms ease;
+    }
 
-/* CHAT */
-#chat{display:none;opacity:0;transition:opacity 700ms ease;}
-.chat-shell{
-  width:min(520px,100%);
-  height:min(720px,100%);
-  border:1px solid var(--border);
-  border-radius:14px;
-  display:flex;
-  flex-direction:column;
-  overflow:hidden;
-}
-.chat-header{
-  padding:14px;
-  text-align:center;
-  border-bottom:1px solid var(--border);
-  letter-spacing:.2em;
-  font-weight:600;
-  font-size:14px;
-}
-.chat-body{
-  flex:1;
-  padding:14px;
-  overflow:auto;
-  display:flex;
-  flex-direction:column;
-  gap:10px;
-}
-.msg{
-  max-width:85%;
-  padding:10px 12px;
-  border-radius:14px;
-  font-size:16px;
-  white-space:pre-wrap;
-}
-.msg.effie{
-  align-self:flex-start;
-  background:var(--effieBubble);
-  color:var(--effieText);
-}
-.msg.user{
-  align-self:flex-end;
-  background:var(--userBubble);
-  color:var(--userText);
-}
-.chat-input{
-  padding:10px;
-  border-top:1px solid var(--border);
-  display:flex;
-  gap:10px;
-}
-.chat-input input{
-  flex:1;
-  height:44px;
-  border-radius:12px;
-  border:1px solid rgba(255,255,255,.10);
-  background:var(--inputBg);
-  color:var(--gold);
-  padding:0 12px;
-  font-size:16px;
-}
-.chat-input button{
-  height:44px;
-  min-width:88px;
-  border:none;
-  border-radius:12px;
-  background:var(--btnBg);
-  color:var(--btnText);
-  font-weight:700;
-  cursor:pointer;
-}
-</style>
+    .chat-shell{
+      width:min(520px, 100%);
+      height:min(720px, 100%);
+      border:1px solid var(--border);
+      border-radius:14px;
+      background: rgba(255,255,255,.02);
+      display:flex;
+      flex-direction:column;
+      overflow:hidden;
+    }
+
+    .chat-header{
+      padding:14px 16px;
+      border-bottom:1px solid var(--border);
+      text-align:center;
+      letter-spacing:.22em;
+      font-weight:600;
+      font-size:14px;
+    }
+
+    .chat-body{
+      flex:1;
+      padding:14px 14px 10px;
+      overflow:auto;
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+    }
+
+    .msg{
+      max-width: 85%;
+      padding:10px 12px;
+      border-radius:14px;
+      line-height:1.35;
+      font-size: clamp(15px, 4.2vw, 17px);
+      border:1px solid rgba(255,255,255,.06);
+      box-shadow: 0 8px 24px rgba(0,0,0,.25);
+      white-space:pre-wrap;
+      word-wrap:break-word;
+    }
+    .msg.effie{
+      align-self:flex-start;
+      background: var(--effieBubble);
+      color: var(--effieText);
+      border-color: rgba(205,174,117,.18);
+    }
+    .msg.user{
+      align-self:flex-end;
+      background: var(--userBubble);
+      color: var(--userText);
+      border-color: rgba(255,255,255,.09);
+    }
+
+    .chat-input{
+      padding:10px;
+      border-top:1px solid var(--border);
+      display:flex;
+      gap:10px;
+      background: rgba(0,0,0,.35);
+    }
+    .chat-input input{
+      flex:1;
+      height:44px;
+      border-radius:12px;
+      border:1px solid rgba(255,255,255,.10);
+      background: var(--inputBg);
+      color: var(--gold);
+      padding:0 12px;
+      font-size:16px;
+      outline:none;
+    }
+    .chat-input input::placeholder{
+      color: rgba(205,174,117,.55);
+    }
+    .chat-input button{
+      height:44px;
+      min-width:88px;
+      border:none;
+      border-radius:12px;
+      background: var(--btnBg);
+      color: var(--btnText);
+      font-weight:700;
+      font-size:15px;
+      cursor:pointer;
+    }
+    .chat-input button:active{ transform: translateY(1px); }
+    .chat-input button:disabled{
+      opacity:.55;
+      cursor:not-allowed;
+    }
+
+    @media (max-height: 760px){
+      .intro-wrap, .chat-shell{ height:100%; }
+    }
+
+    @media (max-width: 560px){
+      .intro-wrap, .chat-shell{
+        width:100%;
+        height:100%;
+        border-radius: 0;
+      }
+      .stage{
+        padding: env(safe-area-inset-top) env(safe-area-inset-right)
+                 env(safe-area-inset-bottom) env(safe-area-inset-left);
+      }
+    }
+  </style>
 </head>
 
 <body>
-
-<div id="intro" class="stage">
-  <div class="intro-wrap">
-    <video class="intro-video" autoplay muted playsinline preload="auto">
-      <source src="https://adilo.bigcommand.com/738d463d-1007-4047-976e-217a85184554.mp4" type="video/mp4"/>
-    </video>
-    <button class="intro-skip" id="skipBtn">Skip</button>
-  </div>
-</div>
-
-<div id="chat" class="stage">
-  <div class="chat-shell">
-    <div class="chat-header">EFFIE</div>
-    <div class="chat-body" id="chatBody">
-      <div class="msg effie">Hi. I'm here.</div>
-    </div>
-    <div class="chat-input">
-      <input id="userInput" placeholder="Say anything..." autocomplete="off"/>
-      <button id="sendBtn" disabled>Send</button>
+  <!-- INTRO -->
+  <div id="intro" class="stage" aria-hidden="false">
+    <div class="intro-wrap">
+      <video class="intro-video" autoplay muted playsinline preload="auto">
+        <source src="https://adilo.bigcommand.com/738d463d-1007-4047-976e-217a85184554.mp4" type="video/mp4" />
+      </video>
+      <button class="intro-skip" id="skipBtn" type="button">Skip</button>
     </div>
   </div>
-</div>
 
-<script>
+  <!-- CHAT -->
+  <div id="chat" class="stage" aria-hidden="true">
+    <div class="chat-shell">
+      <div class="chat-header">EFFIE</div>
 
-const INTRO_MS = 5000;
-const FADE_MS = 700;
+      <div class="chat-body" id="chatBody">
+        <div class="msg effie">Hi. I'm here.</div>
+      </div>
 
-const intro = document.getElementById('intro');
-const chat  = document.getElementById('chat');
-const chatBody = document.getElementById('chatBody');
-const input = document.getElementById('userInput');
-const sendBtn = document.getElementById('sendBtn');
-const skipBtn = document.getElementById('skipBtn');
+      <div class="chat-input">
+        <input id="userInput" type="text" placeholder="Say anything..." autocomplete="off" />
+        <button id="sendBtn" type="button" disabled>Send</button>
+      </div>
+    </div>
+  </div>
 
-let switched = false;
-let busy = false;
+  <script>
+    const INTRO_MS = 5000;
+    const FADE_MS  = 700;
 
-/* ===== USER ID ===== */
-const STORAGE_USER_ID_KEY = "effie_user_id_v1";
-function getOrCreateUserId(){
-  let id = localStorage.getItem(STORAGE_USER_ID_KEY);
-  if(!id){
-    id = "ef_" + crypto.randomUUID();
-    localStorage.setItem(STORAGE_USER_ID_KEY,id);
-  }
-  return id;
-}
-const USER_ID = getOrCreateUserId();
+    const intro = document.getElementById('intro');
+    const chat  = document.getElementById('chat');
 
-/* ===== LOCAL MEMORY ===== */
-const STORAGE_HISTORY_KEY = "effie_history_v1";
-const STORAGE_LASTDATE_KEY = "effie_last_date_v1";
+    const chatBody = document.getElementById('chatBody');
+    const input = document.getElementById('userInput');
+    const sendBtn = document.getElementById('sendBtn');
+    const skipBtn = document.getElementById('skipBtn');
 
-function todayKey(){ return new Date().toISOString().slice(0,10); }
+    let switched = false;
+    let busy = false;
 
-function loadHistory(){
-  try{
-    const raw = localStorage.getItem(STORAGE_HISTORY_KEY);
-    const arr = raw ? JSON.parse(raw) : [];
-    return Array.isArray(arr)?arr:[];
-  }catch{return [];}
-}
-function saveHistory(arr){
-  localStorage.setItem(STORAGE_HISTORY_KEY,JSON.stringify(arr.slice(-10)));
-}
-function hasTalkedToday(){
-  return localStorage.getItem(STORAGE_LASTDATE_KEY)===todayKey();
-}
-function markTalkedToday(){
-  localStorage.setItem(STORAGE_LASTDATE_KEY,todayKey());
-}
+    // ===== USER ID LAYER (NEW) =====
+    const STORAGE_USER_ID_KEY = "effie_user_id_v1";
 
-/* ===== CHAT UI ===== */
-function addUserMessage(text){
-  const el=document.createElement('div');
-  el.className='msg user';
-  el.textContent=text;
-  chatBody.appendChild(el);
-  chatBody.scrollTop=chatBody.scrollHeight;
-}
-function addEffieMessage(text){
-  const el=document.createElement('div');
-  el.className='msg effie';
-  el.textContent=text;
-  chatBody.appendChild(el);
-  chatBody.scrollTop=chatBody.scrollHeight;
-}
-function setBusy(state){
-  busy=state;
-  input.disabled=state;
-  sendBtn.disabled=state||input.value.trim()==="";
-  sendBtn.textContent=state?"...":"Send";
-}
+    function getOrCreateUserId() {
+      let id = localStorage.getItem(STORAGE_USER_ID_KEY);
+      if (!id) {
+        id = "ef_" + crypto.randomUUID();
+        localStorage.setItem(STORAGE_USER_ID_KEY, id);
+      }
+      return id;
+    }
 
-input.addEventListener('input',()=>setBusy(false));
+    const USER_ID = getOrCreateUserId();
+    // ===== END USER ID LAYER =====
 
-async function handleSend(){
-  const text=input.value.trim();
-  if(!text||busy)return;
+    // ===== Effie local memory (MVP) =====
+    const STORAGE_HISTORY_KEY = "effie_history_v1";
+    const STORAGE_LASTDATE_KEY = "effie_last_date_v1";
 
-  addUserMessage(text);
-  input.value='';
-  setBusy(true);
+    function todayKey() {
+      return new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    }
 
-  const history=loadHistory();
-  history.push({role:"user",content:text});
-  saveHistory(history);
+    function loadHistory() {
+      try {
+        const raw = localStorage.getItem(STORAGE_HISTORY_KEY);
+        const arr = raw ? JSON.parse(raw) : [];
+        return Array.isArray(arr) ? arr : [];
+      } catch {
+        return [];
+      }
+    }
 
-  const typing=addEffieMessage("…");
+    function saveHistory(arr) {
+      const trimmed = arr.slice(-10); // keep last 10 messages max
+      localStorage.setItem(STORAGE_HISTORY_KEY, JSON.stringify(trimmed));
+    }
 
-  try{
-    const res=await fetch('/.netlify/functions/effie',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({
-        message:text,
-        history:loadHistory(),
-        meta:{
-          user_id:USER_ID,
-          hasTalkedToday:hasTalkedToday()
+    function hasTalkedToday() {
+      return localStorage.getItem(STORAGE_LASTDATE_KEY) === todayKey();
+    }
+
+    function markTalkedToday() {
+      localStorage.setItem(STORAGE_LASTDATE_KEY, todayKey());
+    }
+
+    function setSendEnabled() {
+      sendBtn.disabled = busy || input.value.trim().length === 0;
+    }
+
+    input.addEventListener('input', setSendEnabled);
+
+    function addUserMessage(text){
+      const el = document.createElement('div');
+      el.className = 'msg user';
+      el.textContent = text;
+      chatBody.appendChild(el);
+      chatBody.scrollTop = chatBody.scrollHeight;
+      return el;
+    }
+
+    function addEffieMessage(text){
+      const el = document.createElement('div');
+      el.className = 'msg effie';
+      el.textContent = text;
+      chatBody.appendChild(el);
+      chatBody.scrollTop = chatBody.scrollHeight;
+      return el;
+    }
+
+    function setBusy(state){
+      busy = state;
+      input.disabled = state;
+      setSendEnabled();
+      sendBtn.textContent = state ? "..." : "Send";
+    }
+
+    // OPTIONAL: render saved history when chat opens (so refresh keeps conversation)
+    function renderSavedHistory(){
+      const history = loadHistory();
+      if(!history.length) return;
+
+      // Clear current content (including default "Hi. I'm here.")
+      chatBody.innerHTML = '';
+
+      history.forEach(m => {
+        if(m.role === 'user') addUserMessage(m.content);
+        if(m.role === 'assistant') addEffieMessage(m.content);
+      });
+
+      chatBody.scrollTop = chatBody.scrollHeight;
+    }
+
+    async function handleSend(){
+      const text = input.value.trim();
+      if(!text || busy) return;
+
+      // show user message
+      addUserMessage(text);
+      input.value = '';
+      setBusy(true);
+
+      // store user msg
+      const h1 = loadHistory();
+      h1.push({ role: "user", content: text });
+      saveHistory(h1);
+
+      // “typing” bubble
+      const typingEl = addEffieMessage("…");
+
+      try {
+        const res = await fetch('/.netlify/functions/effie', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message: text,
+            history: loadHistory(),
+            meta: {
+              user_id: USER_ID,                 // NEW
+              hasTalkedToday: hasTalkedToday()
+            }
+          })
+        });
+
+        let data = {};
+        try { data = await res.json(); } catch(e) {}
+
+        if(!res.ok){
+          const msg = data?.reply || data?.error?.message || data?.message || `Server error (${res.status})`;
+          typingEl.textContent = msg;
+        } else {
+          const reply = data.reply || "I'm here.";
+          typingEl.textContent = reply;
+
+          // store assistant msg
+          const h2 = loadHistory();
+          h2.push({ role: "assistant", content: reply });
+          saveHistory(h2);
+
+          // mark talked today
+          markTalkedToday();
         }
-      })
+
+      } catch (err) {
+        console.error(err);
+        typingEl.textContent = "Connection error. Try again.";
+      } finally {
+        setBusy(false);
+        input.focus();
+      }
+    }
+
+    sendBtn.addEventListener('click', handleSend);
+
+    input.addEventListener('keydown', (e) => {
+      if(e.key === 'Enter'){
+        e.preventDefault();
+        handleSend();
+      }
     });
 
-    const data=await res.json();
-    const reply=data.reply||"I'm here.";
-    typing.textContent=reply;
+    function switchToChat(){
+      if(switched) return;
+      switched = true;
 
-    const h2=loadHistory();
-    h2.push({role:"assistant",content:reply});
-    saveHistory(h2);
+      intro.style.opacity = '0';
 
-    markTalkedToday();
+      setTimeout(() => {
+        intro.style.display = 'none';
+        intro.setAttribute('aria-hidden', 'true');
 
-  }catch{
-    typing.textContent="Connection error.";
-  }finally{
-    setBusy(false);
-    input.focus();
-  }
-}
+        chat.style.display = 'flex';
+        chat.setAttribute('aria-hidden', 'false');
 
-sendBtn.addEventListener('click',handleSend);
-input.addEventListener('keydown',e=>{
-  if(e.key==="Enter"){e.preventDefault();handleSend();}
-});
+        requestAnimationFrame(() => {
+          chat.style.opacity = '1';
+          document.body.style.overflow = 'auto';
 
-function switchToChat(){
-  if(switched)return;
-  switched=true;
-  intro.style.opacity='0';
-  setTimeout(()=>{
-    intro.style.display='none';
-    chat.style.display='flex';
-    requestAnimationFrame(()=>{
-      chat.style.opacity='1';
-      document.body.style.overflow='auto';
-      input.focus();
-    });
-  },FADE_MS);
-}
+          // render history only when chat is visible
+          renderSavedHistory();
 
-skipBtn.addEventListener('click',switchToChat);
-setTimeout(switchToChat,INTRO_MS);
+          input.focus();
+        });
 
-</script>
+      }, FADE_MS);
+    }
+
+    skipBtn.addEventListener('click', switchToChat);
+    setTimeout(switchToChat, INTRO_MS);
+
+    // initial state
+    setSendEnabled();
+  </script>
 </body>
 </html>

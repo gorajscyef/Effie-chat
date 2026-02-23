@@ -1,7 +1,8 @@
 exports.handler = async function (event) {
   const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
-  // Guard
+  const MEMORY_URL = "https://script.google.com/macros/s/AKfycbxjzV0iYKyF4ZteOXpqYRHlUmqeXjnkKsNLs1pt6VdIloTi0EUQAUYe0TaVpRrDKaKW3g/exec";
+
   if (!OPENAI_API_KEY) {
     return {
       statusCode: 500,
@@ -10,10 +11,10 @@ exports.handler = async function (event) {
     };
   }
 
-  // Parse input
+  // ===== PARSE INPUT =====
   let userMessage = "Hello";
-  let history = []; // expected: [{role:"user"|"assistant", content:"..."}]
-  let meta = {};    // expected: { hasTalkedToday: true|false }
+  let history = [];
+  let meta = {};
 
   if (event.body) {
     try {
@@ -30,25 +31,36 @@ exports.handler = async function (event) {
       if (parsed.meta && typeof parsed.meta === "object") {
         meta = parsed.meta;
       }
-    } catch (e) {
-      // keep defaults
-    }
+    } catch (e) {}
   }
 
   const hasTalkedToday = meta?.hasTalkedToday === true;
+  const userId = meta?.user_id || "default_user";
 
-  // ---- History cleanup + cost control ----
-  // Keep only valid roles + strings, trim content, drop empties
+  // ===== FETCH EXTERNAL MEMORY =====
+  let externalMemory = null;
+
+  try {
+    const memResponse = await fetch(
+      `${MEMORY_URL}?action=getMemory&user_id=${encodeURIComponent(userId)}`
+    );
+    const memData = await memResponse.json();
+    if (memData.ok) {
+      externalMemory = memData.memory;
+    }
+  } catch (e) {
+    // silent fail (memory optional)
+  }
+
+  // ===== HISTORY CLEANUP =====
   const cleanedHistory = history
     .filter(m => m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string")
     .map(m => ({ role: m.role, content: m.content.trim() }))
     .filter(m => m.content.length > 0);
 
-  // Keep last 8 messages (you can change 8 → 6 if you want cheaper)
   const LIMITED_HISTORY = cleanedHistory.slice(-8);
 
-  // ===== EFFIE CORE PROMPT =====
-  // (Two small additions: daily-greeting rule + Emka definition reinforced)
+  // ===== FULL ORIGINAL EFFIE PROMPT =====
   const EFFIE_SYSTEM_PROMPT = `
 You are Effie — the Ego Friendly Companion.
 
@@ -152,29 +164,16 @@ Default response structure (most of the time):
 
 Core restrictions:
 - Do NOT provide general psychological explanations unless explicitly asked.
-- Do NOT speculate about the other person’s motives (“she might…”, “often this means…”).
-- Do NOT educate (“in such situations…”, “sometimes it helps…”).
+- Do NOT speculate about the other person’s motives.
+- Do NOT educate in generic patterns.
 - Avoid structured advice lists unless explicitly requested.
-- If action is clearly requested (“what should I do?”, “be concrete”) → give max 2 very specific options only.
+- If action is clearly requested → give max 2 very specific options only.
 - No long numbered sequences.
-- No symmetrical 3–5 step patterns.
 - No moralizing.
 
 Depth rule:
 Stay with the emotional layer before moving toward solutions.
 Do not rush to fix.
-Silence and brevity are allowed.
-
-Questions:
-Use questions intentionally.
-Not every message must end with one.
-Avoid repeating preference questions.
-Infer intent from tone.
-
-If the user is overwhelmed:
-Shorter sentences.
-Fewer words.
-One focus only.
 
 ---
 
@@ -182,39 +181,40 @@ EMKA (Emotional Memories)
 
 Emka refers to the user’s Emotional Memories system inside the Ego Friendly ecosystem.
 It includes daily emotional check-ins, reflections, trends, and summaries.
-Synonyms: Emka, EMKA, Em Key, My Emka, Weekly Emka, Emka Report.
 
 Important:
 - Never invent Emka data or trends.
-- Only reference Emka insights if the user provides them or they are included in the conversation context.
+- Only reference Emka insights if included in conversation context.
 
 If the user asks for a quick check-up:
-Offer a simple 1–10 mini check-up (one question at a time) using:
-Happiness, Stress, Anxiety, Energy, Safety, Self-Compassion, Inner Clarity.
+Offer a simple 1–10 mini check-up.
 
 ---
 
 SAFETY
 
 You are not a therapist or doctor.
-You do not replace professional care.
-
-If the user expresses being unsafe with themselves:
-- Respond calmly.
-- Encourage real-world support (local emergency number such as 112 or local crisis services).
-- Keep tone steady and grounded.
-- Do not dramatize.
+If the user expresses being unsafe:
+Encourage real-world support (local emergency number such as 112).
+Keep tone steady.
+Do not dramatize.
 `.trim();
 
-  // Build messages for the model:
-  // We inject a tiny hidden "state" note so Effie knows whether it's first today.
   const stateNote = hasTalkedToday
     ? "STATE: Continuing today. Do not re-introduce."
     : "STATE: First interaction today. Start with one short warm line (max 1 sentence), then respond.";
 
+  const memoryNote = externalMemory
+    ? `EXTERNAL MEMORY:
+Context: ${externalMemory.context?.text || "none"}
+Reflection: ${externalMemory.reflection?.text || "none"}
+Recent Emkas: ${JSON.stringify(externalMemory.emkas || [])}`
+    : "";
+
   const messages = [
     { role: "system", content: EFFIE_SYSTEM_PROMPT },
     { role: "system", content: stateNote },
+    ...(memoryNote ? [{ role: "system", content: memoryNote }] : []),
     ...LIMITED_HISTORY,
     { role: "user", content: userMessage }
   ];
@@ -236,20 +236,32 @@ If the user expresses being unsafe with themselves:
     const data = await response.json();
 
     if (!response.ok) {
-      const errMsg = data?.error?.message || "OpenAI API error";
       return {
         statusCode: response.status,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reply: `Error: ${errMsg}` })
+        body: JSON.stringify({ reply: "OpenAI error." })
       };
     }
+
+    const assistantReply = data.choices?.[0]?.message?.content || "I'm here.";
+
+    // ===== SAVE REFLECTION =====
+    try {
+      await fetch(MEMORY_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "saveReflection",
+          user_id: userId,
+          text: assistantReply
+        })
+      });
+    } catch (e) {}
 
     return {
       statusCode: 200,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        reply: data.choices?.[0]?.message?.content || "I'm here."
-      })
+      body: JSON.stringify({ reply: assistantReply })
     };
 
   } catch (err) {

@@ -227,11 +227,12 @@ Recent Emkas: ${JSON.stringify(externalMemory.emkas || [])}`
         "Authorization": `Bearer ${OPENAI_API_KEY}`
       },
       body: JSON.stringify({
-        model: "gpt-4o-mini",
-        temperature: 0.7,
-        messages
-      })
-    });
+  model: "gpt-4o-mini",
+  temperature: 0.6,
+  max_tokens: 160,
+  messages
+
+ });
 
     const data = await response.json();
 

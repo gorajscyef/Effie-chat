@@ -1,13 +1,18 @@
+// netlify/functions/effie.js
+
 exports.handler = async function (event) {
   const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
-  const MEMORY_URL = "https://script.google.com/macros/s/AKfycbxjzV0iYKyF4ZteOXpqYRHlUmqeXjnkKsNLs1pt6VdIloTi0EUQAUYe0TaVpRrDKaKW3g/exec";
+  const MEMORY_URL =
+    "https://script.google.com/macros/s/AKfycbxjzV0iYKyF4ZteOXpqYRHlUmqeXjnkKsNLs1pt6VdIloTi0EUQAUYe0TaVpRrDKaKW3g/exec";
 
   if (!OPENAI_API_KEY) {
     return {
       statusCode: 500,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ reply: "Missing OPENAI_API_KEY in environment variables." })
+      body: JSON.stringify({
+        reply: "Missing OPENAI_API_KEY in environment variables.",
+      }),
     };
   }
 
@@ -31,7 +36,9 @@ exports.handler = async function (event) {
       if (parsed.meta && typeof parsed.meta === "object") {
         meta = parsed.meta;
       }
-    } catch (e) {}
+    } catch (e) {
+      // ignore parse errors
+    }
   }
 
   const hasTalkedToday = meta?.hasTalkedToday === true;
@@ -45,7 +52,7 @@ exports.handler = async function (event) {
       `${MEMORY_URL}?action=getMemory&user_id=${encodeURIComponent(userId)}`
     );
     const memData = await memResponse.json();
-    if (memData.ok) {
+    if (memData && memData.ok) {
       externalMemory = memData.memory;
     }
   } catch (e) {
@@ -54,9 +61,14 @@ exports.handler = async function (event) {
 
   // ===== HISTORY CLEANUP =====
   const cleanedHistory = history
-    .filter(m => m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string")
-    .map(m => ({ role: m.role, content: m.content.trim() }))
-    .filter(m => m.content.length > 0);
+    .filter(
+      (m) =>
+        m &&
+        (m.role === "user" || m.role === "assistant") &&
+        typeof m.content === "string"
+    )
+    .map((m) => ({ role: m.role, content: m.content.trim() }))
+    .filter((m) => m.content.length > 0);
 
   const LIMITED_HISTORY = cleanedHistory.slice(-8);
 
@@ -216,7 +228,7 @@ Recent Emkas: ${JSON.stringify(externalMemory.emkas || [])}`
     { role: "system", content: stateNote },
     ...(memoryNote ? [{ role: "system", content: memoryNote }] : []),
     ...LIMITED_HISTORY,
-    { role: "user", content: userMessage }
+    { role: "user", content: userMessage },
   ];
 
   try {
@@ -224,27 +236,29 @@ Recent Emkas: ${JSON.stringify(externalMemory.emkas || [])}`
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${OPENAI_API_KEY}`
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
       },
       body: JSON.stringify({
-  model: "gpt-4o-mini",
-  temperature: 0.6,
-  max_tokens: 160,
-  messages
-
- });
+        model: "gpt-4o-mini",
+        temperature: 0.6,
+        max_tokens: 160,
+        messages: messages,
+      }),
+    });
 
     const data = await response.json();
 
     if (!response.ok) {
+      console.error("OpenAI error:", response.status, data);
       return {
         statusCode: response.status,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reply: "OpenAI error." })
+        body: JSON.stringify({ reply: "OpenAI error." }),
       };
     }
 
-    const assistantReply = data.choices?.[0]?.message?.content || "I'm here.";
+    const assistantReply =
+      data?.choices?.[0]?.message?.content?.trim() || "I'm here.";
 
     // ===== SAVE REFLECTION =====
     try {
@@ -254,22 +268,24 @@ Recent Emkas: ${JSON.stringify(externalMemory.emkas || [])}`
         body: JSON.stringify({
           action: "saveReflection",
           user_id: userId,
-          text: assistantReply
-        })
+          text: assistantReply,
+        }),
       });
-    } catch (e) {}
+    } catch (e) {
+      // silent fail (memory optional)
+    }
 
     return {
       statusCode: 200,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ reply: assistantReply })
+      body: JSON.stringify({ reply: assistantReply }),
     };
-
   } catch (err) {
+    console.error("Function crash:", err);
     return {
       statusCode: 500,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ reply: "Server error calling OpenAI." })
+      body: JSON.stringify({ reply: "Server error calling OpenAI." }),
     };
   }
 };

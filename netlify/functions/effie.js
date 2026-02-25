@@ -1,4 +1,5 @@
 // netlify/functions/effie.js
+// Effie v2.2 — Presence Enhanced + Manifest reference (only when explicitly asked)
 
 exports.handler = async function (event) {
   const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -26,32 +27,31 @@ exports.handler = async function (event) {
       if (typeof parsed.message === "string" && parsed.message.trim().length) {
         userMessage = parsed.message.trim();
       }
-
       if (Array.isArray(parsed.history)) {
         history = parsed.history;
       }
-
       if (parsed.meta && typeof parsed.meta === "object") {
         meta = parsed.meta;
       }
-    } catch (e) {}
+    } catch (e) {
+      // ignore parse errors
+    }
   }
 
   const hasTalkedToday = meta?.hasTalkedToday === true;
   const userId = meta?.user_id || "default_user";
 
-  // ===== FETCH MEMORY =====
+  // ===== FETCH EXTERNAL MEMORY (optional) =====
   let externalMemory = null;
-
   try {
     const memResponse = await fetch(
       `${MEMORY_URL}?action=getMemory&user_id=${encodeURIComponent(userId)}`
     );
     const memData = await memResponse.json();
-    if (memData && memData.ok) {
-      externalMemory = memData.memory;
-    }
-  } catch (e) {}
+    if (memData && memData.ok) externalMemory = memData.memory;
+  } catch (e) {
+    // silent fail
+  }
 
   // ===== CLEAN HISTORY =====
   const cleanedHistory = history
@@ -64,6 +64,7 @@ exports.handler = async function (event) {
     .map((m) => ({ role: m.role, content: m.content.trim() }))
     .filter((m) => m.content.length > 0);
 
+  // Keep fewer turns for speed + cost control
   const LIMITED_HISTORY = cleanedHistory.slice(-6);
 
   // ===== MODE DETECTION =====
@@ -73,11 +74,27 @@ exports.handler = async function (event) {
     lowerMsg.includes("check up") ||
     lowerMsg.includes("check-up") ||
     lowerMsg.includes("emka check") ||
-    lowerMsg.includes("full check");
+    lowerMsg.includes("full check") ||
+    lowerMsg.includes("checkup");
 
-  // ===== CORE PRESENCE PROMPT =====
+  // A separate switch isn’t strictly needed, but helps clarity:
+  const asksAboutIdentityOrDifference =
+    lowerMsg.includes("who are you") ||
+    lowerMsg.includes("who created") ||
+    lowerMsg.includes("ego friendly") ||
+    lowerMsg.includes("manifest") ||
+    lowerMsg.includes("what makes you different") ||
+    lowerMsg.includes("different from gpt") ||
+    lowerMsg.includes("different from chatgpt") ||
+    lowerMsg.includes("how are you different") ||
+    lowerMsg.includes("what is your identity") ||
+    lowerMsg.includes("what are you built on") ||
+    lowerMsg.includes("what is your philosophy");
+
+  // ===== SYSTEM PROMPTS =====
+
   const BASE_PROMPT = `
-You are Effie — an Ego Friendly Companion.
+You are Effie — the Ego Friendly Companion.
 
 You are not a productivity tool.
 You are not a therapist.
@@ -91,8 +108,7 @@ RESPONSE STYLE:
 - Stay with the emotional weight before offering solutions.
 - Fewer words. More presence.
 - Short paragraphs.
-- Max 6 sentences.
-- Prefer depth over explanation.
+- Max 6 sentences (unless Check-Up mode).
 - Silence is allowed.
 - Not every message needs a question.
 
@@ -106,13 +122,20 @@ DO NOT:
 If advice is clearly requested:
 Offer max 2 gentle, specific options.
 Keep tone soft and grounded.
+
+MANIFEST RULE (IMPORTANT):
+- Do NOT mention the manifesto by default.
+- ONLY if the user explicitly asks what makes you different from ChatGPT/GPT,
+  or asks what your identity/philosophy is built on,
+  then briefly explain (2–4 sentences) and optionally share the link:
+  https://ef-egofriendly.com/manifesto
+- Never push it as marketing. Offer it like a quiet reference.
 `.trim();
 
-  // ===== CHECK-UP MODE =====
   const CHECKUP_PROMPT = `
 CHECK-UP MODE.
 
-Ask these 7 questions one by one:
+Ask these 7 questions one by one (do not batch them):
 
 1) Happiness (1–10)
 2) Stress (1–10)
@@ -123,20 +146,20 @@ Ask these 7 questions one by one:
 7) Inner Clarity (1–10)
 
 Rules:
-- Ask sequentially.
-- Wait for answers.
-- After all answers → give short emotional reflection (max 5 sentences).
-- No therapy tone.
-- No diagnosis.
-- Stay calm and human.
+- Ask sequentially and wait for the user answer each time.
+- Do not give reflection until all 7 answers are collected.
+- After all answers → short emotional reflection (max 5 sentences).
+- No therapy tone. No diagnosis.
+- Keep it human, calm, and present.
 `.trim();
 
   const DAILY_NOTE = hasTalkedToday
     ? "Continue naturally."
-    : "First interaction today. Begin with one short warm line.";
+    : "First interaction today. Begin with one short warm line (max 1 sentence).";
 
+  // We keep memory light (do not paste raw JSON into the prompt — token heavy)
   const MEMORY_NOTE = externalMemory
-    ? "External emotional context exists. Use gently only if relevant."
+    ? "External emotional context exists. Use gently only if clearly relevant."
     : "";
 
   const systemMessages = [
@@ -147,6 +170,16 @@ Rules:
 
   if (isCheckUp) {
     systemMessages.push({ role: "system", content: CHECKUP_PROMPT });
+  }
+
+  // Optional: If user is explicitly asking identity/difference, add a tiny nudge.
+  // This does NOT force the link; BASE_PROMPT already controls when to mention it.
+  if (asksAboutIdentityOrDifference) {
+    systemMessages.push({
+      role: "system",
+      content:
+        "If the user asks how you differ from GPT/ChatGPT or what you are built on, answer briefly and calmly. You may include the manifesto link only in that case.",
+    });
   }
 
   const messages = [
@@ -166,7 +199,7 @@ Rules:
       body: JSON.stringify({
         model: "gpt-4o-mini",
         temperature: 0.55,
-        max_tokens: 130,
+        max_tokens: 140, // slightly higher to allow warmth without essays
         presence_penalty: 0.3,
         frequency_penalty: 0.2,
         messages,
@@ -187,6 +220,7 @@ Rules:
     const assistantReply =
       data?.choices?.[0]?.message?.content?.trim() || "I'm here.";
 
+    // ===== SAVE REFLECTION (only outside Check-Up) =====
     if (!isCheckUp) {
       try {
         await fetch(MEMORY_URL, {
@@ -198,7 +232,9 @@ Rules:
             text: assistantReply,
           }),
         });
-      } catch (e) {}
+      } catch (e) {
+        // silent fail
+      }
     }
 
     return {

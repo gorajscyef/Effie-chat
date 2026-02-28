@@ -8,7 +8,7 @@ exports.handler = async function (event) {
   const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
   const MEMORY_URL =
-    "https://script.google.com/macros/s/AKfycbxjzV0iYKyF4ZteOXpqYRHlUmqeXjnkKsNLs1pt6VdIloTi0EUQAUYe0TaVpRrDKaKW3g/exec";
+    "https://script.google.com/macros/s/AKfycbzAS9gvvriYvCxyI8ziAn-ZD0rBaIpT3JTi8-qQN4UJzxKDQ6q8nMZrFHE_lKHh8G7DNw/exec";
 
   if (!OPENAI_API_KEY) {
     return {

@@ -1,606 +1,423 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Effie</title>
 
-  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="theme-color" content="#000000">
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="format-detection" content="telephone=no">
 
-  <style>
-    :root{
-      --bg:#000000;
-      --gold:#cdae75;
-      --border: rgba(205,174,117,.35);
+<title>Effie</title>
 
-      --effieBubble: rgba(255,255,255,.05);
-      --userBubble: rgba(13, 22, 40, .92);
-      --userText:#ffffff;
-      --effieText: var(--gold);
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#000000">
 
-      --inputBg: rgba(255,255,255,.06);
-      --btnBg: var(--gold);
-      --btnText: #1a1a1a;
+<style>
 
-      --saveBg: rgba(255,255,255,.06);
-      --saveBorder: rgba(205,174,117,.25);
-    }
+:root{
+--bg:#000000;
+--gold:#cdae75;
+--border: rgba(205,174,117,.35);
 
-    *{ box-sizing:border-box; }
-    html,body{ height:100%; }
-    body{
-      margin:0;
-      background:var(--bg);
-      color:var(--gold);
-      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-      -webkit-font-smoothing:antialiased;
-      overflow:hidden; /* during intro */
-    }
+--effieBubble: rgba(255,255,255,.05);
+--userBubble: rgba(13,22,40,.92);
+--userText:#ffffff;
+--effieText: var(--gold);
 
-    .stage{
-      position:fixed;
-      inset:0;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
-               max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
-    }
+--inputBg: rgba(255,255,255,.06);
+--btnBg: var(--gold);
+--btnText:#1a1a1a;
 
-    /* INTRO */
-    #intro{
-      opacity:1;
-      transition: opacity 800ms ease;
-    }
-    .intro-wrap{
-      width:min(520px, 100%);
-      height:min(720px, 100%);
-      border:1px solid var(--border);
-      border-radius:14px;
-      background:linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.01));
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      overflow:hidden;
-      position:relative;
-    }
-    .intro-video{
-      width:100%;
-      height:100%;
-      object-fit:cover;
-      display:block;
-      filter: contrast(1.05) saturate(1.05);
-    }
-    .intro-skip{
-      position:absolute;
-      bottom:14px;
-      right:14px;
-      padding:10px 12px;
-      border-radius:10px;
-      border:1px solid var(--border);
-      background: rgba(0,0,0,.45);
-      color: var(--gold);
-      font-size:14px;
-      cursor:pointer;
-    }
-    .intro-skip:active{ transform: translateY(1px); }
+--saveBg: rgba(255,255,255,.06);
+--saveBorder: rgba(205,174,117,.25);
+}
 
-    /* CHAT */
-    #chat{
-      display:none;
-      opacity:0;
-      transition: opacity 800ms ease;
-    }
+*{box-sizing:border-box}
 
-    .chat-shell{
-      width:min(520px, 100%);
-      height:min(720px, 100%);
-      border:1px solid var(--border);
-      border-radius:14px;
-      background: rgba(255,255,255,.02);
-      display:flex;
-      flex-direction:column;
-      overflow:hidden;
-    }
+html,body{height:100%}
 
-    .chat-header{
-      padding:14px 16px;
-      border-bottom:1px solid var(--border);
-      text-align:center;
-      letter-spacing:.06em;
-      font-weight:500;
-      font-size:17px;
-    }
+body{
+margin:0;
+background:var(--bg);
+color:var(--gold);
+font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+-webkit-font-smoothing:antialiased;
+-webkit-touch-callout:none;
+overflow:auto;
+}
 
-    .chat-body{
-      flex:1;
-      padding:14px 16px 10px;
-      overflow:auto;
-      display:flex;
-      flex-direction:column;
-      gap:18px;
-    }
+.stage{
+position:fixed;
+inset:0;
+display:flex;
+align-items:center;
+justify-content:center;
+padding:max(12px,env(safe-area-inset-top))
+max(12px,env(safe-area-inset-right))
+max(12px,env(safe-area-inset-bottom))
+max(12px,env(safe-area-inset-left));
+}
 
-    .msg{
-      max-width: 85%;
-      padding: 14px 16px;
-      border-radius: 18px;
-      line-height: 1.6;
-      font-size: 19px;
-      border: 1px solid rgba(255,255,255,.06);
-      box-shadow: 0 4px 16px rgba(0,0,0,.25);
-      white-space: pre-wrap;
-      word-wrap: break-word;
-    }
+#chat{
+display:flex;
+opacity:1;
+}
 
-    .msg.effie{
-      align-self:flex-start;
-      background: var(--effieBubble);
-      color: var(--effieText);
-      border-color: rgba(205,174,117,.18);
-    }
-    .msg.user{
-      align-self:flex-end;
-      background: var(--userBubble);
-      color: var(--userText);
-      border-color: rgba(255,255,255,.09);
-    }
+.chat-shell{
+width:min(520px,100%);
+height:min(720px,100%);
+border:1px solid var(--border);
+border-radius:14px;
+background:rgba(255,255,255,.02);
+display:flex;
+flex-direction:column;
+overflow:hidden;
+}
 
-    /* Reflection wrapper (Effie) */
-    .effie-wrap{
-      align-self:flex-start;
-      display:flex;
-      flex-direction:column;
-      gap:10px;
-      max-width: 85%;
-    }
+.chat-header{
+padding:14px 16px;
+border-bottom:1px solid var(--border);
+text-align:center;
+letter-spacing:.06em;
+font-weight:500;
+font-size:17px;
+}
 
-    .reflection-actions{
-      display:flex;
-      gap:10px;
-      align-items:center;
-    }
+.chat-body{
+flex:1;
+padding:14px 16px 10px;
+overflow:auto;
+display:flex;
+flex-direction:column;
+gap:18px;
+}
 
-    .save-btn{
-      padding:10px 12px;
-      border-radius:12px;
-      border:1px solid var(--saveBorder);
-      background: var(--saveBg);
-      color: var(--gold);
-      cursor:pointer;
-      font-weight:600;
-      font-size:14px;
-    }
-    .save-btn:active{ transform: translateY(1px); }
-    .save-btn[disabled]{ opacity:.55; cursor:not-allowed; }
+.msg{
+max-width:85%;
+padding:14px 16px;
+border-radius:18px;
+line-height:1.75;
+font-size:19px;
+border:1px solid rgba(255,255,255,.06);
+box-shadow:0 4px 16px rgba(0,0,0,.25);
+white-space:pre-wrap;
+word-wrap:break-word;
+}
 
-    .save-status{
-      font-size:13px;
-      color: rgba(205,174,117,.8);
-    }
+.msg.effie{
+align-self:flex-start;
+background:var(--effieBubble);
+color:var(--effieText);
+border-color:rgba(205,174,117,.18);
+}
 
-    .chat-input{
-      padding:10px;
-      border-top:1px solid var(--border);
-      display:flex;
-      gap:10px;
-      background: rgba(0,0,0,.22);
-    }
-    .chat-input input{
-      flex:1;
-      height:44px;
-      border-radius:12px;
-      border:1px solid rgba(255,255,255,.10);
-      background: var(--inputBg);
-      color: var(--gold);
-      padding:0 12px;
-      font-size:16px;
-      outline:none;
-    }
-    .chat-input input::placeholder{
-      color: rgba(205,174,117,.55);
-    }
-    .chat-input button{
-      height:44px;
-      min-width:88px;
-      border:none;
-      border-radius:12px;
-      background: var(--btnBg);
-      color: var(--btnText);
-      font-weight:700;
-      font-size:15px;
-      cursor:pointer;
-    }
-    .chat-input button:active{ transform: translateY(1px); }
-    .chat-input button:disabled{
-      opacity:.55;
-      cursor:not-allowed;
-    }
+.msg.user{
+align-self:flex-end;
+background:var(--userBubble);
+color:var(--userText);
+border-color:rgba(255,255,255,.09);
+}
 
-    @media (max-height: 760px){
-      .intro-wrap, .chat-shell{ height:100%; }
-    }
+.effie-wrap{
+align-self:flex-start;
+display:flex;
+flex-direction:column;
+gap:10px;
+max-width:85%;
+}
 
-    @media (max-width: 560px){
-      .intro-wrap, .chat-shell{
-        width:100%;
-        height:100%;
-        border-radius: 0;
-      }
-      .stage{
-        padding: env(safe-area-inset-top) env(safe-area-inset-right)
-                 env(safe-area-inset-bottom) env(safe-area-inset-left);
-      }
-    }
-  </style>
+.reflection-actions{
+display:flex;
+gap:10px;
+align-items:center;
+}
+
+.save-btn{
+padding:10px 12px;
+border-radius:12px;
+border:1px solid var(--saveBorder);
+background:var(--saveBg);
+color:var(--gold);
+cursor:pointer;
+font-weight:600;
+font-size:14px;
+}
+
+.save-btn:active{transform:translateY(1px)}
+
+.save-btn[disabled]{
+opacity:.55;
+cursor:not-allowed;
+}
+
+.save-status{
+font-size:13px;
+color:rgba(205,174,117,.8);
+}
+
+.chat-input{
+padding:10px;
+border-top:1px solid var(--border);
+display:flex;
+gap:10px;
+background:rgba(0,0,0,.22);
+}
+
+.chat-input input{
+flex:1;
+height:44px;
+border-radius:12px;
+border:1px solid rgba(255,255,255,.10);
+background:var(--inputBg);
+color:var(--gold);
+padding:0 12px;
+font-size:16px;
+outline:none;
+}
+
+.chat-input input::placeholder{
+color:rgba(205,174,117,.55);
+}
+
+.chat-input button{
+height:44px;
+min-width:88px;
+border:none;
+border-radius:12px;
+background:var(--btnBg);
+color:var(--btnText);
+font-weight:700;
+font-size:15px;
+cursor:pointer;
+}
+
+.chat-input button:active{transform:translateY(1px)}
+
+.chat-input button:disabled{
+opacity:.55;
+cursor:not-allowed;
+}
+
+@media(max-height:760px){
+.chat-shell{height:100%}
+}
+
+@media(max-width:560px){
+.chat-shell{
+width:100%;
+height:100%;
+border-radius:0;
+}
+
+.stage{
+padding:
+env(safe-area-inset-top)
+env(safe-area-inset-right)
+env(safe-area-inset-bottom)
+env(safe-area-inset-left);
+}
+}
+
+</style>
 </head>
 
 <body>
-  <!-- INTRO -->
-  <div id="intro" class="stage" aria-hidden="false">
-    <div class="intro-wrap">
-      <video class="intro-video" autoplay muted playsinline preload="auto">
-        <source src="https://adilo.bigcommand.com/738d463d-1007-4047-976e-217a85184554.mp4" type="video/mp4" />
-      </video>
-      <button class="intro-skip" id="skipBtn" type="button">Skip</button>
-    </div>
-  </div>
-
-  <!-- CHAT -->
-  <div id="chat" class="stage" aria-hidden="true">
-    <div class="chat-shell">
-      <div class="chat-header">Effie</div>
-
-      <div class="chat-body" id="chatBody">
-        <div class="msg effie">Hi. I'm here.</div>
-      </div>
-
-      <div class="chat-input">
-        <input id="userInput" type="text" placeholder="Say anything..." autocomplete="off" />
-        <button id="sendBtn" type="button" disabled>Send</button>
-      </div>
-    </div>
-  </div>
-
-  <script>
-    // ===== CONFIG =====
-    const INTRO_MS = 5000;
-    const FADE_MS  = 800;
-
-    // Apps Script (same as in your Netlify function)
-    const MEMORY_URL = "https://script.google.com/macros/s/AKfycbzAS9gvvriYvCxyI8ziAn-ZD0rBaIpT3JTi8-qQN4UJzxKDQ6q8nMZrFHE_lKHh8G7DNw/exec";
-
-    const intro = document.getElementById('intro');
-    const chat  = document.getElementById('chat');
-
-    const chatBody = document.getElementById('chatBody');
-    const input = document.getElementById('userInput');
-    const sendBtn = document.getElementById('sendBtn');
-    const skipBtn = document.getElementById('skipBtn');
-
-    let switched = false;
-    let busy = false;
-
-    // ===== USER ID LAYER =====
-    const STORAGE_USER_ID_KEY = "effie_user_id_v1";
-    function getOrCreateUserId() {
-      let id = localStorage.getItem(STORAGE_USER_ID_KEY);
-      if (!id) {
-        id = "ef_" + crypto.randomUUID();
-        localStorage.setItem(STORAGE_USER_ID_KEY, id);
-      }
-      return id;
-    }
-    const USER_ID = getOrCreateUserId();
-
-    // ===== Effie local memory (MVP) =====
-    const STORAGE_HISTORY_KEY = "effie_history_v1";
-    const STORAGE_LASTDATE_KEY = "effie_last_date_v1";
-
-    function todayKey() {
-      return new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-    }
-
-    function loadHistory() {
-      try {
-        const raw = localStorage.getItem(STORAGE_HISTORY_KEY);
-        const arr = raw ? JSON.parse(raw) : [];
-        return Array.isArray(arr) ? arr : [];
-      } catch {
-        return [];
-      }
-    }
-
-    function saveHistory(arr) {
-      const trimmed = arr.slice(-10);
-      localStorage.setItem(STORAGE_HISTORY_KEY, JSON.stringify(trimmed));
-    }
-
-    function hasTalkedToday() {
-      return localStorage.getItem(STORAGE_LASTDATE_KEY) === todayKey();
-    }
-
-    function markTalkedToday() {
-      localStorage.setItem(STORAGE_LASTDATE_KEY, todayKey());
-    }
-
-    function setSendEnabled() {
-      sendBtn.disabled = busy || input.value.trim().length === 0;
-    }
-    input.addEventListener('input', setSendEnabled);
-
-    function addUserMessage(text){
-      const el = document.createElement('div');
-      el.className = 'msg user';
-      el.textContent = text;
-      chatBody.appendChild(el);
-      chatBody.scrollTop = chatBody.scrollHeight;
-      return el;
-    }
-
-    // --- NEW: Effie message renderer that supports [REFLECTION] + Save button
-    function extractReflection(replyText){
-      // returns {cleanText, reflectionText|null}
-      const lines = (replyText || "").split("\n").map(s => s.trim());
-      const refLine = lines.find(l => l.startsWith("[REFLECTION]"));
-      if(!refLine) return { cleanText: replyText, reflectionText: null };
-
-      const reflectionText = refLine.replace("[REFLECTION]", "").trim();
-
-      // Remove the [REFLECTION] line from main bubble so reflection stands alone
-      const remainingLines = lines.filter(l => l !== refLine);
-      const cleanText = remainingLines.join("\n").trim();
-
-      return { cleanText, reflectionText: reflectionText || null };
-    }
-
-    async function saveDailyReflectionToSheets(reflectionText){
-      // best-effort. If Apps Script doesn't allow CORS, it may fail -> fallback copy.
-      const payload = {
-        action: "saveDailyReflection",
-        user_id: USER_ID,
-        date: todayKey(),
-        text: reflectionText
-      };
-
-      const res = await fetch(MEMORY_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
-
-      let data = null;
-      try { data = await res.json(); } catch(e) {}
-
-      if(!res.ok) {
-        const msg = data?.message || data?.error || `Save failed (${res.status})`;
-        throw new Error(msg);
-      }
-      if(data && data.ok === false) {
-        throw new Error(data.message || "Save failed.");
-      }
-      return true;
-    }
-
-    async function copyToClipboard(text){
-      try {
-        await navigator.clipboard.writeText(text);
-        return true;
-      } catch(e) {
-        // fallback for older iOS
-        const ta = document.createElement("textarea");
-        ta.value = text;
-        ta.style.position = "fixed";
-        ta.style.left = "-9999px";
-        document.body.appendChild(ta);
-        ta.focus();
-        ta.select();
-        const ok = document.execCommand("copy");
-        document.body.removeChild(ta);
-        return ok;
-      }
-    }
-
-    function addEffieMessageWithOptionalSave(replyText){
-      const { cleanText, reflectionText } = extractReflection(replyText);
-
-      // If no reflection: normal Effie bubble
-      if(!reflectionText){
-        const el = document.createElement('div');
-        el.className = 'msg effie';
-        el.textContent = replyText;
-        chatBody.appendChild(el);
-        chatBody.scrollTop = chatBody.scrollHeight;
-        return { bubbleEl: el, saveUI: null };
-      }
-
-      // With reflection: wrap
-      const wrap = document.createElement("div");
-      wrap.className = "effie-wrap";
-
-      // main bubble (without [REFLECTION] line)
-      if(cleanText && cleanText.length){
-        const main = document.createElement("div");
-        main.className = "msg effie";
-        main.textContent = cleanText;
-        wrap.appendChild(main);
-      }
-
-      // reflection bubble
-      const refBubble = document.createElement("div");
-      refBubble.className = "msg effie";
-      refBubble.textContent = reflectionText;
-      wrap.appendChild(refBubble);
-
-      // actions
-      const actions = document.createElement("div");
-      actions.className = "reflection-actions";
-
-      const btn = document.createElement("button");
-      btn.className = "save-btn";
-      btn.type = "button";
-      btn.textContent = "Save";
-
-      const status = document.createElement("div");
-      status.className = "save-status";
-      status.textContent = "";
-
-      btn.addEventListener("click", async () => {
-        if(btn.disabled) return;
-        btn.disabled = true;
-        status.textContent = "Saving...";
-
-        try {
-          await saveDailyReflectionToSheets(reflectionText);
-          status.textContent = "Saved ✓";
-          btn.textContent = "Saved";
-        } catch(err) {
-          // fallback: copy
-          const ok = await copyToClipboard(reflectionText);
-          status.textContent = ok
-            ? "Couldn’t save. Copied ✓ (paste into Reflections)"
-            : "Couldn’t save. Please copy manually.";
-          btn.disabled = false;
-          btn.textContent = "Copy";
-        }
-      });
-
-      actions.appendChild(btn);
-      actions.appendChild(status);
-      wrap.appendChild(actions);
-
-      chatBody.appendChild(wrap);
-      chatBody.scrollTop = chatBody.scrollHeight;
-
-      return { bubbleEl: refBubble, saveUI: { btn, status } };
-    }
-
-    function setBusy(state){
-      busy = state;
-      input.disabled = state;
-      setSendEnabled();
-      sendBtn.textContent = state ? "..." : "Send";
-    }
-
-    // OPTIONAL: render saved history when chat opens
-    function renderSavedHistory(){
-      const history = loadHistory();
-      if(!history.length) return;
-
-      chatBody.innerHTML = '';
-
-      history.forEach(m => {
-        if(m.role === 'user') addUserMessage(m.content);
-        if(m.role === 'assistant') addEffieMessageWithOptionalSave(m.content);
-      });
-
-      chatBody.scrollTop = chatBody.scrollHeight;
-    }
-
-    async function handleSend(){
-      const text = input.value.trim();
-      if(!text || busy) return;
-
-      addUserMessage(text);
-      input.value = '';
-      setBusy(true);
-
-      const h1 = loadHistory();
-      h1.push({ role: "user", content: text });
-      saveHistory(h1);
-
-      // typing placeholder (keeps your 3 dots as-is)
-      const typingEl = document.createElement('div');
-      typingEl.className = 'msg effie';
-      typingEl.textContent = "…";
-      chatBody.appendChild(typingEl);
-      chatBody.scrollTop = chatBody.scrollHeight;
-
-      try {
-        const res = await fetch('/.netlify/functions/effie', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            message: text,
-            history: loadHistory(),
-            meta: {
-              user_id: USER_ID,
-              hasTalkedToday: hasTalkedToday(),
-              today: todayKey()
-            }
-          })
-        });
-
-        let data = {};
-        try { data = await res.json(); } catch(e) {}
-
-        if(!res.ok){
-          const msg = data?.reply || data?.error?.message || data?.message || `Server error (${res.status})`;
-          typingEl.textContent = msg;
-        } else {
-          const reply = (data.reply || "I'm here.").trim();
-
-          // remove typing bubble
-          typingEl.remove();
-
-          // render Effie reply with possible reflection + Save
-          addEffieMessageWithOptionalSave(reply);
-
-          // store assistant msg (including [REFLECTION] line if present)
-          const h2 = loadHistory();
-          h2.push({ role: "assistant", content: reply });
-          saveHistory(h2);
-
-          markTalkedToday();
-        }
-
-      } catch (err) {
-        console.error(err);
-        typingEl.textContent = "Connection error. Try again.";
-      } finally {
-        setBusy(false);
-        input.focus();
-      }
-    }
-
-    sendBtn.addEventListener('click', handleSend);
-    input.addEventListener('keydown', (e) => {
-      if(e.key === 'Enter'){
-        e.preventDefault();
-        handleSend();
-      }
-    });
-
-    function switchToChat(){
-      if(switched) return;
-      switched = true;
-
-      intro.style.opacity = '0';
-
-      setTimeout(() => {
-        intro.style.display = 'none';
-        intro.setAttribute('aria-hidden', 'true');
-
-        chat.style.display = 'flex';
-        chat.setAttribute('aria-hidden', 'false');
-
-        requestAnimationFrame(() => {
-          chat.style.opacity = '1';
-          document.body.style.overflow = 'auto';
-          renderSavedHistory();
-          input.focus();
-        });
-
-      }, FADE_MS);
-    }
-
-    skipBtn.addEventListener('click', switchToChat);
-    setTimeout(switchToChat, INTRO_MS);
-
-    setSendEnabled();
-  </script>
+
+<div id="chat" class="stage">
+
+<div class="chat-shell">
+
+<div class="chat-header">Effie</div>
+
+<div class="chat-body" id="chatBody">
+<div class="msg effie">Hi. I'm here.</div>
+</div>
+
+<div class="chat-input">
+<input id="userInput" type="text" placeholder="Say anything..." autocomplete="off">
+<button id="sendBtn" type="button" disabled>Send</button>
+</div>
+
+</div>
+</div>
+
+<script defer>
+
+const MEMORY_URL="https://script.google.com/macros/s/AKfycbzAS9gvvriYvCxyI8ziAn-ZD0rBaIpT3JTi8-qQN4UJzxKDQ6q8nMZrFHE_lKHh8G7DNw/exec"
+
+const chatBody=document.getElementById("chatBody")
+const input=document.getElementById("userInput")
+const sendBtn=document.getElementById("sendBtn")
+
+let busy=false
+
+const STORAGE_USER_ID_KEY="effie_user_id_v1"
+
+function getOrCreateUserId(){
+let id=localStorage.getItem(STORAGE_USER_ID_KEY)
+if(!id){
+id="ef_"+crypto.randomUUID()
+localStorage.setItem(STORAGE_USER_ID_KEY,id)
+}
+return id
+}
+
+const USER_ID=getOrCreateUserId()
+
+const STORAGE_HISTORY_KEY="effie_history_v1"
+const STORAGE_LASTDATE_KEY="effie_last_date_v1"
+
+function todayKey(){
+return new Date().toISOString().slice(0,10)
+}
+
+function loadHistory(){
+try{
+const raw=localStorage.getItem(STORAGE_HISTORY_KEY)
+const arr=raw?JSON.parse(raw):[]
+return Array.isArray(arr)?arr:[]
+}catch{return[]}
+}
+
+function saveHistory(arr){
+const trimmed=arr.slice(-10)
+localStorage.setItem(STORAGE_HISTORY_KEY,JSON.stringify(trimmed))
+}
+
+function hasTalkedToday(){
+return localStorage.getItem(STORAGE_LASTDATE_KEY)===todayKey()
+}
+
+function markTalkedToday(){
+localStorage.setItem(STORAGE_LASTDATE_KEY,todayKey())
+}
+
+function setSendEnabled(){
+sendBtn.disabled=busy||input.value.trim().length===0
+}
+
+input.addEventListener("input",setSendEnabled)
+
+function addUserMessage(text){
+const el=document.createElement("div")
+el.className="msg user"
+el.textContent=text
+chatBody.appendChild(el)
+chatBody.scrollTop=chatBody.scrollHeight
+}
+
+function addEffieMessage(text){
+const el=document.createElement("div")
+el.className="msg effie"
+el.textContent=text
+chatBody.appendChild(el)
+chatBody.scrollTop=chatBody.scrollHeight
+}
+
+function setBusy(state){
+busy=state
+input.disabled=state
+setSendEnabled()
+sendBtn.textContent=state?"...":"Send"
+}
+
+async function handleSend(){
+
+const text=input.value.trim()
+if(!text||busy)return
+
+addUserMessage(text)
+
+input.value=""
+setBusy(true)
+
+const h1=loadHistory()
+h1.push({role:"user",content:text})
+saveHistory(h1)
+
+const typing=document.createElement("div")
+typing.className="msg effie"
+typing.textContent="…"
+chatBody.appendChild(typing)
+
+try{
+
+const res=await fetch("/.netlify/functions/effie",{
+method:"POST",
+headers:{"Content-Type":"application/json"},
+body:JSON.stringify({
+message:text,
+history:loadHistory(),
+meta:{
+user_id:USER_ID,
+hasTalkedToday:hasTalkedToday(),
+today:todayKey()
+}
+})
+})
+
+let data={}
+try{data=await res.json()}catch(e){}
+
+if(!res.ok){
+typing.textContent="Server error."
+}else{
+
+const reply=(data.reply||"I'm here.").trim()
+
+typing.remove()
+
+addEffieMessage(reply)
+
+const h2=loadHistory()
+h2.push({role:"assistant",content:reply})
+saveHistory(h2)
+
+markTalkedToday()
+}
+
+}catch(e){
+typing.textContent="Connection error."
+}
+
+finally{
+setBusy(false)
+input.focus()
+}
+
+}
+
+sendBtn.addEventListener("click",handleSend)
+
+input.addEventListener("keydown",e=>{
+if(e.key==="Enter"){
+e.preventDefault()
+handleSend()
+}
+})
+
+function renderSavedHistory(){
+
+const history=loadHistory()
+
+if(!history.length)return
+
+chatBody.innerHTML=""
+
+history.forEach(m=>{
+if(m.role==="user")addUserMessage(m.content)
+if(m.role==="assistant")addEffieMessage(m.content)
+})
+
+chatBody.scrollTop=chatBody.scrollHeight
+}
+
+renderSavedHistory()
+
+input.focus()
+setSendEnabled()
+
+</script>
 </body>
 </html>

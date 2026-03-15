@@ -1,10 +1,10 @@
 // netlify/functions/effie.js
-// Effie v2.7 — FAST by default, Google Sheet memory ONLY on explicit Emka/Memory actions
+// Effie v2.8 — FAST by default, Google Sheet memory ONLY on explicit Emka/Memory actions
 // Core rules:
 // - Default chat = NO Google Sheet fetch/save (fast).
 // - Emka can be done in the APP (preferred) OR in chat if user asks.
 // - Fetch Emka/Memory from Google Sheet ONLY when user explicitly requests it (or when in Emka chat mode).
-// - Reflection + Pattern logic ONLY when EmkaOps is active.
+// - Reflection + Pattern logic ONLY when EmkaOps are active.
 // - Allowed to say "please wait" ONLY for Emka fetch/Memory actions.
 // - OpenAI model configurable via env OPENAI_MODEL (default gpt-4o-mini).
 
@@ -56,11 +56,6 @@ exports.handler = async function (event) {
 
   function normalizeText(s) {
     return (s || "").toString().trim();
-  }
-
-  function isYesPL(s) {
-    const t = (s || "").trim().toLowerCase();
-    return ["tak", "jasne", "okej", "ok", "dobra", "dobrze", "zgoda", "zapisz", "save"].includes(t);
   }
 
   function isSimpleNumericAnswer(s) {
@@ -122,6 +117,14 @@ exports.handler = async function (event) {
       "daily check",
       "daily check-in",
       "quick check",
+      "start emka",
+      "start checkup",
+      "start check-up",
+      "start daily check",
+      "do emka",
+      "begin emka",
+      "run emka",
+      "emka",
       "zróbmy emk",
       "zrobmy emk",
       "zrób emk",
@@ -130,11 +133,8 @@ exports.handler = async function (event) {
       "zrob mi emk",
       "zrób mi emka",
       "zrob mi emka",
-      "start emka",
-      "start emk",
       "uruchom emk",
-      "uruchom emka",
-      "emka"
+      "uruchom emka"
     ]) &&
     !hasAny(lowerMsg, [
       "pobierz emk",
@@ -207,13 +207,13 @@ exports.handler = async function (event) {
     return (
       tail.includes("check-up mode (emka)") ||
       tail.includes("emka mode") ||
-      tail.includes("1) happiness") ||
-      tail.includes("2) stress") ||
-      tail.includes("3) anxiety") ||
-      tail.includes("4) energy") ||
-      tail.includes("5) safety") ||
-      tail.includes("6) self-compassion") ||
-      tail.includes("7) purpose") ||
+      tail.includes("1) happiness (1-10)") ||
+      tail.includes("2) stress (1-10)") ||
+      tail.includes("3) anxiety (1-10)") ||
+      tail.includes("4) energy (1-10)") ||
+      tail.includes("5) safety (1-10)") ||
+      tail.includes("6) self-compassion (1-10)") ||
+      tail.includes("7) purpose (1-10)") ||
       tail.includes("happiness (1-10)") ||
       tail.includes("stress (1-10)") ||
       tail.includes("anxiety (1-10)") ||
@@ -230,26 +230,27 @@ exports.handler = async function (event) {
       .map((m) => m.content.toLowerCase());
 
     let step = 0;
+
     for (const msg of assistantMessages) {
-      if (msg.includes("1) happiness") || msg.includes("happiness (1-10)") || msg.includes("happiness (1–10)")) {
+      if (msg.includes("1) happiness") || msg.includes("happiness (1-10)")) {
         step = Math.max(step, 1);
       }
-      if (msg.includes("2) stress") || msg.includes("stress (1-10)") || msg.includes("stress (1–10)")) {
+      if (msg.includes("2) stress") || msg.includes("stress (1-10)")) {
         step = Math.max(step, 2);
       }
-      if (msg.includes("3) anxiety") || msg.includes("anxiety (1-10)") || msg.includes("anxiety (1–10)")) {
+      if (msg.includes("3) anxiety") || msg.includes("anxiety (1-10)")) {
         step = Math.max(step, 3);
       }
-      if (msg.includes("4) energy") || msg.includes("energy (1-10)") || msg.includes("energy (1–10)")) {
+      if (msg.includes("4) energy") || msg.includes("energy (1-10)")) {
         step = Math.max(step, 4);
       }
-      if (msg.includes("5) safety") || msg.includes("safety (1-10)") || msg.includes("safety (1–10)")) {
+      if (msg.includes("5) safety") || msg.includes("safety (1-10)")) {
         step = Math.max(step, 5);
       }
-      if (msg.includes("6) self-compassion") || msg.includes("self-compassion (1-10)") || msg.includes("self-compassion (1–10)")) {
+      if (msg.includes("6) self-compassion") || msg.includes("self-compassion (1-10)")) {
         step = Math.max(step, 6);
       }
-      if (msg.includes("7) purpose") || msg.includes("purpose (1-10)") || msg.includes("purpose (1–10)")) {
+      if (msg.includes("7) purpose") || msg.includes("purpose (1-10)")) {
         step = Math.max(step, 7);
       }
     }
@@ -263,13 +264,13 @@ exports.handler = async function (event) {
     const lu = lastUser?.content || "";
 
     if (isSimpleNumericAnswer(lu)) {
-      if (la.includes("1) happiness") || la.includes("happiness (1-10)") || la.includes("happiness (1–10)")) return 2;
-      if (la.includes("2) stress") || la.includes("stress (1-10)") || la.includes("stress (1–10)")) return 3;
-      if (la.includes("3) anxiety") || la.includes("anxiety (1-10)") || la.includes("anxiety (1–10)")) return 4;
-      if (la.includes("4) energy") || la.includes("energy (1-10)") || la.includes("energy (1–10)")) return 5;
-      if (la.includes("5) safety") || la.includes("safety (1-10)") || la.includes("safety (1–10)")) return 6;
-      if (la.includes("6) self-compassion") || la.includes("self-compassion (1-10)") || la.includes("self-compassion (1–10)")) return 7;
-      if (la.includes("7) purpose") || la.includes("purpose (1-10)") || la.includes("purpose (1–10)")) return 8;
+      if (la.includes("1) happiness") || la.includes("happiness (1-10)")) return 2;
+      if (la.includes("2) stress") || la.includes("stress (1-10)")) return 3;
+      if (la.includes("3) anxiety") || la.includes("anxiety (1-10)")) return 4;
+      if (la.includes("4) energy") || la.includes("energy (1-10)")) return 5;
+      if (la.includes("5) safety") || la.includes("safety (1-10)")) return 6;
+      if (la.includes("6) self-compassion") || la.includes("self-compassion (1-10)")) return 7;
+      if (la.includes("7) purpose") || la.includes("purpose (1-10)")) return 8;
     }
 
     return step;
@@ -277,7 +278,6 @@ exports.handler = async function (event) {
 
   const emkaChatOngoing = isLikelyInEmkaChatMode(cleanedHistory);
   const emkaCurrentStep = detectEmkaStep(cleanedHistory);
-
   const allowEmkaOps = Boolean(isCheckUpRequest || emkaChatOngoing || isEmkaFetchRequest);
 
   // ===== Fetch external memory ONLY when allowed =====
@@ -299,7 +299,7 @@ exports.handler = async function (event) {
         memFetchOk = true;
       }
     } catch (_) {
-      // keep silent; prompt handles graceful fallback
+      // silent fallback
     } finally {
       memFetchMs = nowMs() - t0;
     }
@@ -387,6 +387,7 @@ You are presence: warm, grounded, human.
 LANGUAGE:
 - Reply in the user's language.
 - If the user writes in Polish, reply in Polish unless they ask for English.
+- Exception: during Emka / Check-Up mode, always use English.
 
 STYLE:
 - Short paragraphs.
@@ -439,19 +440,25 @@ You must guide Emka step by step in this exact order:
 6) Self-Compassion (1-10)
 7) Purpose (1-10)
 
+IMPORTANT:
+- During Emka, always use English.
+- Keep the step labels exactly in English.
+- Do not translate the Emka questions.
+- Do not replace the numbered questions with reflective follow-up questions.
+
 Rules:
 - Ask only one question at a time.
 - Wait for the user's answer before moving to the next question.
 - If the user gives a number from 1 to 10, treat it as the answer to the current step and move to the next step.
 - Do not skip steps.
 - Do not add advice during the steps.
+- Do not ask what influenced the score between steps.
 - Do not turn Emka into a general conversation until all 7 answers are complete.
+- Each step should be one short line only.
 - After question 7 is answered, create a short reflection (max 5 sentences).
 - Then ask gently if the user wants to save that reflection to My Space as part of their journal.
 - No diagnosis. No therapy tone.
 `.trim();
-
-  const EMKA_STEP_NOTE = inEmkaStepSystemNote(emkaChatOngoing, emkaCurrentStep, userMessage);
 
   function inEmkaStepSystemNote(emkaOngoing, currentStep, currentUserMessage) {
     if (!emkaOngoing && !isCheckUpRequest) {
@@ -459,7 +466,7 @@ Rules:
     }
 
     if (isCheckUpRequest && currentStep === 0) {
-      return "EMKA STEP CONTROL: Start at step 1 now. Ask only: 1) Happiness (1-10).";
+      return "EMKA STEP CONTROL: Start at step 1 now. Reply with exactly one line only: 1) Happiness (1-10)";
     }
 
     if (!emkaOngoing) return "";
@@ -468,28 +475,30 @@ Rules:
       return `EMKA STEP CONTROL: The user is still in Emka. Stay on the current step ${Math.max(
         currentStep,
         1
-      )}. If needed, gently repeat that step only.`;
+      )}. Reply with only that numbered question, in English.`;
     }
 
     switch (currentStep) {
       case 1:
-        return "EMKA STEP CONTROL: The user answered step 1. Ask only step 2 now: 2) Stress (1-10).";
+        return "EMKA STEP CONTROL: The user answered step 1. Reply with exactly one line only: 2) Stress (1-10)";
       case 2:
-        return "EMKA STEP CONTROL: The user answered step 2. Ask only step 3 now: 3) Anxiety (1-10).";
+        return "EMKA STEP CONTROL: The user answered step 2. Reply with exactly one line only: 3) Anxiety (1-10)";
       case 3:
-        return "EMKA STEP CONTROL: The user answered step 3. Ask only step 4 now: 4) Energy (1-10).";
+        return "EMKA STEP CONTROL: The user answered step 3. Reply with exactly one line only: 4) Energy (1-10)";
       case 4:
-        return "EMKA STEP CONTROL: The user answered step 4. Ask only step 5 now: 5) Safety (1-10).";
+        return "EMKA STEP CONTROL: The user answered step 4. Reply with exactly one line only: 5) Safety (1-10)";
       case 5:
-        return "EMKA STEP CONTROL: The user answered step 5. Ask only step 6 now: 6) Self-Compassion (1-10).";
+        return "EMKA STEP CONTROL: The user answered step 5. Reply with exactly one line only: 6) Self-Compassion (1-10)";
       case 6:
-        return "EMKA STEP CONTROL: The user answered step 6. Ask only step 7 now: 7) Purpose (1-10).";
+        return "EMKA STEP CONTROL: The user answered step 6. Reply with exactly one line only: 7) Purpose (1-10)";
       case 7:
-        return "EMKA STEP CONTROL: The user answered step 7. Now create a short reflection and gently offer to save it to My Space.";
+        return "EMKA STEP CONTROL: The user answered step 7. Now create a short reflection in English and gently offer to save it to My Space.";
       default:
-        return "EMKA STEP CONTROL: Stay calm and continue Emka logically.";
+        return "EMKA STEP CONTROL: Stay calm and continue Emka logically in English only.";
     }
   }
+
+  const EMKA_STEP_NOTE = inEmkaStepSystemNote(emkaChatOngoing, emkaCurrentStep, userMessage);
 
   const DAILY_NOTE = hasTalkedToday
     ? "Continue naturally. Do not greet as if it were a new day."
@@ -569,7 +578,7 @@ Rules:
         },
         body: JSON.stringify({
           model: MODEL,
-          temperature: 0.45,
+          temperature: inCheckup ? 0.2 : 0.45,
           max_tokens: 220,
           presence_penalty: 0.2,
           frequency_penalty: 0.15,
@@ -590,7 +599,7 @@ Rules:
     }
 
     const assistantReply =
-      data?.choices?.[0]?.message?.content?.trim() || "Jestem tutaj.";
+      data?.choices?.[0]?.message?.content?.trim() || "I’m here.";
 
     // ===== SAVE to Google Sheet ONLY when EmkaOps are allowed =====
     if (allowEmkaOps) {
@@ -650,9 +659,9 @@ Rules:
 
       const maybeQ8 =
         assistantReply.toLowerCase().includes("q8") ||
-        assistantReply.toLowerCase().includes("który obszar") ||
-        (assistantReply.toLowerCase().includes("na ile") &&
-          assistantReply.toLowerCase().includes("obciąża"));
+        assistantReply.toLowerCase().includes("which area") ||
+        (assistantReply.toLowerCase().includes("how much") &&
+          assistantReply.toLowerCase().includes("weighed on you"));
 
       if (hasEmkaToday && !q8AskedToday && maybeQ8) {
         try {

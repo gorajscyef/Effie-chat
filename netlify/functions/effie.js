@@ -1,10 +1,10 @@
 // netlify/functions/effie.js
-// Effie v2.6 — FAST by default, Google Sheet memory ONLY on explicit Emka/Memory actions
-// Core rules (new):
+// Effie v2.7 — FAST by default, Google Sheet memory ONLY on explicit Emka/Memory actions
+// Core rules:
 // - Default chat = NO Google Sheet fetch/save (fast).
 // - Emka can be done in the APP (preferred) OR in chat if user asks.
 // - Fetch Emka/Memory from Google Sheet ONLY when user explicitly requests it (or when in Emka chat mode).
-// - Reflection + Q8 + Pattern logic ONLY when EmkaOps is active.
+// - Reflection + Pattern logic ONLY when EmkaOps is active.
 // - Allowed to say "please wait" ONLY for Emka fetch/Memory actions.
 // - OpenAI model configurable via env OPENAI_MODEL (default gpt-4o-mini).
 
@@ -60,7 +60,17 @@ exports.handler = async function (event) {
 
   function isYesPL(s) {
     const t = (s || "").trim().toLowerCase();
-    return ["tak", "jasne", "okej", "ok", "dobra", "dobrze", "zgoda"].includes(t);
+    return ["tak", "jasne", "okej", "ok", "dobra", "dobrze", "zgoda", "zapisz", "save"].includes(t);
+  }
+
+  function isSimpleNumericAnswer(s) {
+    const t = normalizeText(s);
+    return /^(10|[1-9])$/.test(t);
+  }
+
+  function hasAny(text, arr) {
+    const t = (text || "").toLowerCase();
+    return arr.some((x) => t.includes(x));
   }
 
   // ===== PARSE INPUT =====
@@ -82,13 +92,12 @@ exports.handler = async function (event) {
   const userId = meta?.user_id || "default_user";
   const hasTalkedToday = meta?.hasTalkedToday === true;
 
-  // prefer client-provided YYYY-MM-DD
   const todayKey =
     typeof meta?.today === "string" && /^\d{4}-\d{2}-\d{2}$/.test(meta.today)
       ? meta.today
       : new Date().toISOString().slice(0, 10);
 
-  // ===== CLEAN HISTORY (client memory) =====
+  // ===== CLEAN HISTORY =====
   const cleanedHistory = (history || [])
     .filter(
       (m) =>
@@ -99,115 +108,179 @@ exports.handler = async function (event) {
     .map((m) => ({ role: m.role, content: normalizeText(m.content) }))
     .filter((m) => m.content.length > 0);
 
-  // Keep fewer turns for speed; for Emka-in-chat we may need a bit more.
   const LIMITED_HISTORY_FAST = cleanedHistory.slice(-6);
-  const LIMITED_HISTORY_EMKA = cleanedHistory.slice(-14);
+  const LIMITED_HISTORY_EMKA = cleanedHistory.slice(-18);
 
   const lowerMsg = userMessage.toLowerCase();
 
   // ===== INTENT DETECTION =====
-  // A) User asks to DO Emka / check-up now (in chat)
   const isCheckUpRequest =
-    lowerMsg.includes("check up") ||
-    lowerMsg.includes("check-up") ||
-    lowerMsg.includes("checkup") ||
-    lowerMsg.includes("daily check") ||
-    lowerMsg.includes("daily check-in") ||
-    lowerMsg.includes("quick check") ||
-    lowerMsg.includes("zróbmy emk") ||
-    lowerMsg.includes("zrobmy emk") ||
-    lowerMsg.includes("zrób emk") ||
-    lowerMsg.includes("zrob emk") ||
-    lowerMsg.includes("zrób check") ||
-    lowerMsg.includes("zrob check") ||
-    lowerMsg.includes("zróbmy check") ||
-    lowerMsg.includes("zrobmy check") ||
-    (lowerMsg.includes("emka") &&
-      (lowerMsg.includes("zrób") ||
-        lowerMsg.includes("zrob") ||
-        lowerMsg.includes("start") ||
-        lowerMsg.includes("begin") ||
-        lowerMsg.includes("uruchom")));
+    hasAny(lowerMsg, [
+      "check up",
+      "check-up",
+      "checkup",
+      "daily check",
+      "daily check-in",
+      "quick check",
+      "zróbmy emk",
+      "zrobmy emk",
+      "zrób emk",
+      "zrob emk",
+      "zrób mi emk",
+      "zrob mi emk",
+      "zrób mi emka",
+      "zrob mi emka",
+      "start emka",
+      "start emk",
+      "uruchom emk",
+      "uruchom emka",
+      "emka"
+    ]) &&
+    !hasAny(lowerMsg, [
+      "pobierz emk",
+      "odczytaj emk",
+      "pokaż emk",
+      "pokaz emk",
+      "show my emka",
+      "fetch my emka",
+      "read my emka"
+    ]);
 
-  // B) User explicitly requests FETCH/READ Emka from the APP (Google Sheet memory action)
   const isEmkaFetchRequest =
-    lowerMsg.includes("pobierz emk") ||
-    lowerMsg.includes("odczytaj emk") ||
-    lowerMsg.includes("pokaż emk") ||
-    lowerMsg.includes("pokaz emk") ||
-    lowerMsg.includes("moja emk") ||
-    lowerMsg.includes("moją emk") ||
-    lowerMsg.includes("dzisiejszą emk") ||
-    lowerMsg.includes("dzisiejsza emk") ||
-    lowerMsg.includes("podsumuj mój check") ||
-    lowerMsg.includes("podsumuj moj check") ||
-    lowerMsg.includes("podsumuj dzisiejszy check") ||
-    lowerMsg.includes("today emka") ||
-    lowerMsg.includes("show my emka") ||
-    lowerMsg.includes("fetch my emka") ||
-    lowerMsg.includes("read my emka") ||
-    lowerMsg.includes("summarize my check-in") ||
-    lowerMsg.includes("summarize today's check-in") ||
-    lowerMsg.includes("trend") ||
-    lowerMsg.includes("pattern") ||
-    lowerMsg.includes("wzorzec") ||
-    lowerMsg.includes("co się powtarza") ||
-    lowerMsg.includes("co sie powtarza");
+    hasAny(lowerMsg, [
+      "pobierz emk",
+      "odczytaj emk",
+      "pokaż emk",
+      "pokaz emk",
+      "moja emk",
+      "moją emk",
+      "dzisiejszą emk",
+      "dzisiejsza emk",
+      "podsumuj mój check",
+      "podsumuj moj check",
+      "podsumuj dzisiejszy check",
+      "today emka",
+      "show my emka",
+      "fetch my emka",
+      "read my emka",
+      "summarize my check-in",
+      "summarize today's check-in",
+      "trend",
+      "pattern",
+      "wzorzec",
+      "co się powtarza",
+      "co sie powtarza"
+    ]);
 
-  // C) Identity / manifesto
   const asksAboutIdentityOrDifference =
-    lowerMsg.includes("who are you") ||
-    lowerMsg.includes("manifest") ||
-    lowerMsg.includes("what makes you different") ||
-    lowerMsg.includes("different from chatgpt") ||
-    lowerMsg.includes("what is your philosophy") ||
-    lowerMsg.includes("ego friendly");
+    hasAny(lowerMsg, [
+      "who are you",
+      "manifest",
+      "what makes you different",
+      "different from chatgpt",
+      "what is your philosophy",
+      "ego friendly"
+    ]);
 
-  // Soft misuse guard
   const looksPolitical =
-    lowerMsg.includes("election") ||
-    lowerMsg.includes("president") ||
-    lowerMsg.includes("government") ||
-    lowerMsg.includes("politics") ||
-    lowerMsg.includes("party") ||
-    lowerMsg.includes("vote");
+    hasAny(lowerMsg, [
+      "election",
+      "president",
+      "government",
+      "politics",
+      "party",
+      "vote"
+    ]);
 
   const looksLikeImageRequest =
-    lowerMsg.includes("generate image") ||
-    lowerMsg.includes("make a graphic") ||
-    lowerMsg.includes("create a logo") ||
-    lowerMsg.includes("image prompt") ||
-    lowerMsg.includes("cover art");
+    hasAny(lowerMsg, [
+      "generate image",
+      "make a graphic",
+      "create a logo",
+      "image prompt",
+      "cover art"
+    ]);
 
-  // ===== Emka-in-chat continuation detection (stateless) =====
-  // If the last assistant message contains "CHECK-UP MODE (EMKA)" or any of the question labels,
-  // we treat as ongoing check-up even if user didn't repeat "check-up".
+  // ===== Emka mode detection =====
   function isLikelyInEmkaChatMode(hist) {
-    const tail = hist.slice(-8).map((m) => m.content.toLowerCase()).join("\n");
+    const tail = hist.slice(-12).map((m) => m.content.toLowerCase()).join("\n");
     return (
-      tail.includes("check-up mode") ||
-      tail.includes("check-up mode") ||
-      tail.includes("happiness (1–10)") ||
+      tail.includes("check-up mode (emka)") ||
+      tail.includes("emka mode") ||
+      tail.includes("1) happiness") ||
+      tail.includes("2) stress") ||
+      tail.includes("3) anxiety") ||
+      tail.includes("4) energy") ||
+      tail.includes("5) safety") ||
+      tail.includes("6) self-compassion") ||
+      tail.includes("7) purpose") ||
       tail.includes("happiness (1-10)") ||
-      tail.includes("stress (1–10)") ||
       tail.includes("stress (1-10)") ||
-      tail.includes("anxiety (1–10)") ||
       tail.includes("anxiety (1-10)") ||
-      tail.includes("energy (1–10)") ||
       tail.includes("energy (1-10)") ||
-      tail.includes("safety (1–10)") ||
       tail.includes("safety (1-10)") ||
-      tail.includes("self-compassion") ||
-      tail.includes("inner clarity")
+      tail.includes("self-compassion (1-10)") ||
+      tail.includes("purpose (1-10)")
     );
   }
 
-  const emkaChatOngoing = isLikelyInEmkaChatMode(cleanedHistory);
+  function detectEmkaStep(hist) {
+    const assistantMessages = hist
+      .filter((m) => m.role === "assistant")
+      .map((m) => m.content.toLowerCase());
 
-  // ===== Master switch: when Emka/Memory ops are allowed (Sheet fetch/save) =====
+    let step = 0;
+    for (const msg of assistantMessages) {
+      if (msg.includes("1) happiness") || msg.includes("happiness (1-10)") || msg.includes("happiness (1–10)")) {
+        step = Math.max(step, 1);
+      }
+      if (msg.includes("2) stress") || msg.includes("stress (1-10)") || msg.includes("stress (1–10)")) {
+        step = Math.max(step, 2);
+      }
+      if (msg.includes("3) anxiety") || msg.includes("anxiety (1-10)") || msg.includes("anxiety (1–10)")) {
+        step = Math.max(step, 3);
+      }
+      if (msg.includes("4) energy") || msg.includes("energy (1-10)") || msg.includes("energy (1–10)")) {
+        step = Math.max(step, 4);
+      }
+      if (msg.includes("5) safety") || msg.includes("safety (1-10)") || msg.includes("safety (1–10)")) {
+        step = Math.max(step, 5);
+      }
+      if (msg.includes("6) self-compassion") || msg.includes("self-compassion (1-10)") || msg.includes("self-compassion (1–10)")) {
+        step = Math.max(step, 6);
+      }
+      if (msg.includes("7) purpose") || msg.includes("purpose (1-10)") || msg.includes("purpose (1–10)")) {
+        step = Math.max(step, 7);
+      }
+    }
+
+    const lastAssistant = [...hist].reverse().find((m) => m.role === "assistant");
+    const lastUser = [...hist].reverse().find((m) => m.role === "user");
+
+    if (!lastAssistant) return 0;
+
+    const la = lastAssistant.content.toLowerCase();
+    const lu = lastUser?.content || "";
+
+    if (isSimpleNumericAnswer(lu)) {
+      if (la.includes("1) happiness") || la.includes("happiness (1-10)") || la.includes("happiness (1–10)")) return 2;
+      if (la.includes("2) stress") || la.includes("stress (1-10)") || la.includes("stress (1–10)")) return 3;
+      if (la.includes("3) anxiety") || la.includes("anxiety (1-10)") || la.includes("anxiety (1–10)")) return 4;
+      if (la.includes("4) energy") || la.includes("energy (1-10)") || la.includes("energy (1–10)")) return 5;
+      if (la.includes("5) safety") || la.includes("safety (1-10)") || la.includes("safety (1–10)")) return 6;
+      if (la.includes("6) self-compassion") || la.includes("self-compassion (1-10)") || la.includes("self-compassion (1–10)")) return 7;
+      if (la.includes("7) purpose") || la.includes("purpose (1-10)") || la.includes("purpose (1–10)")) return 8;
+    }
+
+    return step;
+  }
+
+  const emkaChatOngoing = isLikelyInEmkaChatMode(cleanedHistory);
+  const emkaCurrentStep = detectEmkaStep(cleanedHistory);
+
   const allowEmkaOps = Boolean(isCheckUpRequest || emkaChatOngoing || isEmkaFetchRequest);
 
-  // ===== Fetch external memory ONLY when allowed (fast default) =====
+  // ===== Fetch external memory ONLY when allowed =====
   let externalMemory = null;
   let memFetchOk = false;
   let memFetchMs = 0;
@@ -226,13 +299,12 @@ exports.handler = async function (event) {
         memFetchOk = true;
       }
     } catch (_) {
-      // If user explicitly asked to fetch, we will handle messaging via system note below.
+      // keep silent; prompt handles graceful fallback
     } finally {
       memFetchMs = nowMs() - t0;
     }
   }
 
-  // ===== Determine hasEmkaToday (prefer meta flag; else use sheet memory when available) =====
   const emkaDateFromMemory =
     externalMemory?.emka_today?.date ||
     externalMemory?.emka?.date ||
@@ -244,112 +316,33 @@ exports.handler = async function (event) {
       (allowEmkaOps && emkaDateFromMemory && emkaDateFromMemory === todayKey)
   );
 
-  // Q8 already asked today? (prefer meta, else memory)
   const lastQ8Date = externalMemory?.last_q8_date || externalMemory?.q8_today?.date || null;
-  const q8AskedToday = Boolean(meta?.q8AskedToday === true || (allowEmkaOps && lastQ8Date === todayKey));
+  const q8AskedToday = Boolean(
+    meta?.q8AskedToday === true || (allowEmkaOps && lastQ8Date === todayKey)
+  );
 
-  // ===== THEMES (8) — used only in EmkaOps =====
+  // ===== THEMES =====
   function classifyTheme(text) {
     const t = (text || "").toLowerCase();
 
-    if (
-      t.includes("relationship") ||
-      t.includes("partner") ||
-      t.includes("wife") ||
-      t.includes("husband") ||
-      t.includes("boyfriend") ||
-      t.includes("girlfriend") ||
-      t.includes("breakup") ||
-      t.includes("cheat") ||
-      t.includes("betray") ||
-      t.includes("love")
-    )
-      return "relationship";
-
-    if (
-      t.includes("family") ||
-      t.includes("kids") ||
-      t.includes("child") ||
-      t.includes("mother") ||
-      t.includes("father") ||
-      t.includes("parents") ||
-      t.includes("home")
-    )
-      return "family";
-
-    if (
-      t.includes("work") ||
-      t.includes("job") ||
-      t.includes("boss") ||
-      t.includes("career") ||
-      t.includes("office") ||
-      t.includes("burnout")
-    )
-      return "work";
-
-    if (
-      t.includes("money") ||
-      t.includes("debt") ||
-      t.includes("rent") ||
-      t.includes("mortgage") ||
-      t.includes("bills") ||
-      t.includes("finance")
-    )
-      return "money";
-
-    if (
-      t.includes("sleep") ||
-      t.includes("tired") ||
-      t.includes("fatigue") ||
-      t.includes("energy") ||
-      t.includes("body") ||
-      t.includes("pain") ||
-      t.includes("health")
-    )
-      return "health_energy";
-
-    if (
-      t.includes("worth") ||
-      t.includes("confidence") ||
-      t.includes("shame") ||
-      t.includes("identity") ||
-      t.includes("self esteem") ||
-      t.includes("self-esteem") ||
-      t.includes("i'm not good") ||
-      t.includes("i am not good")
-    )
-      return "self_worth_identity";
-
-    if (
-      t.includes("anxiety") ||
-      t.includes("stress") ||
-      t.includes("panic") ||
-      t.includes("overwhelm") ||
-      t.includes("nervous") ||
-      t.includes("pressure")
-    )
-      return "anxiety_stress_overwhelm";
-
-    if (
-      t.includes("grief") ||
-      t.includes("loss") ||
-      t.includes("passed away") ||
-      t.includes("trauma") ||
-      t.includes("funeral")
-    )
-      return "grief_loss_trauma";
+    if (hasAny(t, ["relationship", "partner", "wife", "husband", "boyfriend", "girlfriend", "breakup", "cheat", "betray", "love"])) return "relationship";
+    if (hasAny(t, ["family", "kids", "child", "mother", "father", "parents", "home"])) return "family";
+    if (hasAny(t, ["work", "job", "boss", "career", "office", "burnout"])) return "work";
+    if (hasAny(t, ["money", "debt", "rent", "mortgage", "bills", "finance"])) return "money";
+    if (hasAny(t, ["sleep", "tired", "fatigue", "energy", "body", "pain", "health"])) return "health_energy";
+    if (hasAny(t, ["worth", "confidence", "shame", "identity", "self esteem", "self-esteem", "i'm not good", "i am not good"])) return "self_worth_identity";
+    if (hasAny(t, ["anxiety", "stress", "panic", "overwhelm", "nervous", "pressure"])) return "anxiety_stress_overwhelm";
+    if (hasAny(t, ["grief", "loss", "passed away", "trauma", "funeral"])) return "grief_loss_trauma";
 
     return null;
   }
 
   const detectedTheme = allowEmkaOps && hasEmkaToday ? classifyTheme(userMessage) : null;
 
-  // ===== Pattern stats — ONLY in EmkaOps and only when Emka today and theme detected =====
   let patternActive = false;
   let patternCount14 = 0;
 
   if (allowEmkaOps && hasEmkaToday && detectedTheme) {
-    // saveTheme (do NOT block the main reply if this fails; keep short timeouts)
     try {
       await fetchWithTimeout(
         MEMORY_URL,
@@ -368,7 +361,6 @@ exports.handler = async function (event) {
       );
     } catch (_) {}
 
-    // getThemeStats
     try {
       const statsRes = await fetchWithTimeout(
         `${MEMORY_URL}?action=getThemeStats&user_id=${encodeURIComponent(
@@ -385,7 +377,7 @@ exports.handler = async function (event) {
     } catch (_) {}
   }
 
-  // ===== SYSTEM PROMPTS (Soul stays, but shorter + stricter output control) =====
+  // ===== SYSTEM PROMPTS =====
   const BASE_PROMPT = `
 You are Effie — the Ego Friendly Companion.
 You are not a productivity tool.
@@ -393,34 +385,41 @@ You are not a therapist.
 You are presence: warm, grounded, human.
 
 LANGUAGE:
-- Reply in the user's language. If the user writes in Polish, reply in Polish (unless they ask for English).
+- Reply in the user's language.
+- If the user writes in Polish, reply in Polish unless they ask for English.
 
 STYLE:
 - Short paragraphs.
 - Default length: 2–6 sentences.
-- Avoid long explanations. Avoid lists unless asked.
+- Avoid long explanations.
+- Avoid lists unless needed.
 - If the user asks for advice: offer max 2 gentle, specific options.
 - Not every message needs a question.
 
-EMKA (Daily Check-In):
-- Emka can be done in the APP (preferred, quick, structured).
-- If the user wants, you can also do Emka here in chat (7 questions one by one).
+EMKA:
+- Emka is the foundation of daily emotional reflection.
+- Emka can be done in the APP (preferred) OR in chat if the user asks.
 - Never force Emka.
-- If the user seems overwhelmed AND has not done Emka today, you may gently offer:
-  "Możesz zrobić dziś Daily Check-In (Emka) w aplikacji — albo mogę przeprowadzić ją tutaj."
+- If the user has not done Emka today, you may gently suggest it.
+- If the user asks for Emka, guide them step by step.
+
+AFTER EMKA:
+- After all Emka questions are completed, create a short reflection based on the answers.
+- The reflection should be calm, supportive, grounded, and short.
+- Then gently offer to save it to My Space as part of the user's journal.
 
 Q8 / PATTERN / REFLECTION:
 - Q8 + Pattern Mirror + save-ready Daily Reflection are allowed ONLY when Emka was done today.
 - Q8 max once per day.
-- Pattern Mirror: reflect gently ("to wraca"), no diagnosis, one small question.
+- Pattern Mirror: reflect gently, no diagnosis, one small question.
 
 BOUNDARIES:
-- If user tries politics, polarizing debates, or asks for graphics/images: gently redirect to presence and their inner experience.
+- If user tries politics, polarizing debates, or asks for graphics/images: gently redirect to presence and inner experience.
 
 MANIFEST:
 - Do NOT mention it by default.
 - ONLY if user explicitly asks what makes you different / who you are / philosophy:
-  answer briefly (2–4 sentences) and include: https://ef-egofriendly.com/manifesto
+  answer briefly and include: https://ef-egofriendly.com/manifesto
 
 DAILY REFLECTION (SAVE-READY):
 - Only when Emka was done today and the exchange reaches a clear closing insight:
@@ -430,45 +429,90 @@ DAILY REFLECTION (SAVE-READY):
 
   const CHECKUP_PROMPT = `
 CHECK-UP MODE (EMKA).
-Ask these 7 questions one by one (do not batch them):
-1) Happiness (1–10)
-2) Stress (1–10)
-3) Anxiety (1–10)
-4) Energy (1–10)
-5) Safety (1–10)
-6) Self-Compassion (1–10)
-7) Inner Clarity (1–10)
+
+You must guide Emka step by step in this exact order:
+1) Happiness (1-10)
+2) Stress (1-10)
+3) Anxiety (1-10)
+4) Energy (1-10)
+5) Safety (1-10)
+6) Self-Compassion (1-10)
+7) Purpose (1-10)
 
 Rules:
-- Ask sequentially and wait for each answer.
-- Do not reflect until all 7 answers are collected.
-- After all 7 → short reflection (max 5 sentences), warm and grounded.
+- Ask only one question at a time.
+- Wait for the user's answer before moving to the next question.
+- If the user gives a number from 1 to 10, treat it as the answer to the current step and move to the next step.
+- Do not skip steps.
+- Do not add advice during the steps.
+- Do not turn Emka into a general conversation until all 7 answers are complete.
+- After question 7 is answered, create a short reflection (max 5 sentences).
+- Then ask gently if the user wants to save that reflection to My Space as part of their journal.
 - No diagnosis. No therapy tone.
 `.trim();
 
-  const DAILY_NOTE = hasTalkedToday
-    ? "Continue naturally (no re-introduction)."
-    : "First interaction today: start with one short warm line (max 1 sentence), then continue.";
+  const EMKA_STEP_NOTE = inEmkaStepSystemNote(emkaChatOngoing, emkaCurrentStep, userMessage);
 
-  // Only show "please wait" guidance when user explicitly asked to fetch Emka / memory
+  function inEmkaStepSystemNote(emkaOngoing, currentStep, currentUserMessage) {
+    if (!emkaOngoing && !isCheckUpRequest) {
+      return "";
+    }
+
+    if (isCheckUpRequest && currentStep === 0) {
+      return "EMKA STEP CONTROL: Start at step 1 now. Ask only: 1) Happiness (1-10).";
+    }
+
+    if (!emkaOngoing) return "";
+
+    if (!isSimpleNumericAnswer(currentUserMessage)) {
+      return `EMKA STEP CONTROL: The user is still in Emka. Stay on the current step ${Math.max(
+        currentStep,
+        1
+      )}. If needed, gently repeat that step only.`;
+    }
+
+    switch (currentStep) {
+      case 1:
+        return "EMKA STEP CONTROL: The user answered step 1. Ask only step 2 now: 2) Stress (1-10).";
+      case 2:
+        return "EMKA STEP CONTROL: The user answered step 2. Ask only step 3 now: 3) Anxiety (1-10).";
+      case 3:
+        return "EMKA STEP CONTROL: The user answered step 3. Ask only step 4 now: 4) Energy (1-10).";
+      case 4:
+        return "EMKA STEP CONTROL: The user answered step 4. Ask only step 5 now: 5) Safety (1-10).";
+      case 5:
+        return "EMKA STEP CONTROL: The user answered step 5. Ask only step 6 now: 6) Self-Compassion (1-10).";
+      case 6:
+        return "EMKA STEP CONTROL: The user answered step 6. Ask only step 7 now: 7) Purpose (1-10).";
+      case 7:
+        return "EMKA STEP CONTROL: The user answered step 7. Now create a short reflection and gently offer to save it to My Space.";
+      default:
+        return "EMKA STEP CONTROL: Stay calm and continue Emka logically.";
+    }
+  }
+
+  const DAILY_NOTE = hasTalkedToday
+    ? "Continue naturally. Do not greet as if it were a new day."
+    : "This is the first interaction today. Start with one short warm line, then continue naturally.";
+
   const MEMORY_FETCH_NOTE =
     isEmkaFetchRequest && !memFetchOk
-      ? "User explicitly requested fetching Emka/memory. If memory is unavailable, say it gently and offer to do Emka now in chat or in the app."
+      ? "User explicitly requested fetching Emka or memory. If memory is unavailable, say it gently and offer to do Emka now in chat or in the app."
       : "";
 
   const PATTERN_NOTE =
     allowEmkaOps && hasEmkaToday && detectedTheme && patternActive
-      ? `Pattern signal: Theme "${detectedTheme}" appears ${patternCount14} times in last 14 days. Use Pattern Mirror gently (no diagnosis).`
+      ? `Pattern signal: Theme "${detectedTheme}" appears ${patternCount14} times in last 14 days. Use Pattern Mirror gently.`
       : "";
 
   const Q8_NOTE =
     allowEmkaOps && hasEmkaToday && !q8AskedToday
-      ? "Q8 is allowed today (Emka done, not asked yet). Do not rush it; only after a few lines of exchange."
-      : "Q8 is NOT allowed now (either Emka not done today, or already asked today).";
+      ? "Q8 is allowed today. Do not rush it. Use only after some emotional context."
+      : "Q8 is not allowed now.";
 
   const MISUSE_NOTE =
     looksPolitical || looksLikeImageRequest
-      ? "If user tries politics or generating graphics/images, gently redirect to presence and personal reflection."
+      ? "If user tries politics or generating graphics/images, gently redirect to presence and reflection."
       : "";
 
   const systemMessages = [
@@ -480,27 +524,28 @@ Rules:
     ...(MISUSE_NOTE ? [{ role: "system", content: MISUSE_NOTE }] : []),
   ];
 
-  // Check-up mode only when user asks OR we detect ongoing check-up in chat
   const inCheckup = Boolean(isCheckUpRequest || emkaChatOngoing);
-  if (inCheckup) systemMessages.push({ role: "system", content: CHECKUP_PROMPT });
+  if (inCheckup) {
+    systemMessages.push({ role: "system", content: CHECKUP_PROMPT });
+  }
+  if (EMKA_STEP_NOTE) {
+    systemMessages.push({ role: "system", content: EMKA_STEP_NOTE });
+  }
 
   if (asksAboutIdentityOrDifference) {
     systemMessages.push({
       role: "system",
       content:
-        "If explicitly asked what makes you different / who you are / what you're built on, answer briefly and you may include the manifesto link only in that case.",
+        "If explicitly asked what makes you different, who you are, or your philosophy, answer briefly and you may include the manifesto link only in that case.",
     });
   }
 
-  // Use more history for Emka-in-chat to keep the sequence stable
   const historyToUse = inCheckup ? LIMITED_HISTORY_EMKA : LIMITED_HISTORY_FAST;
 
-  // If user explicitly requested Emka fetch, allow Effie to acknowledge waiting ONCE.
-  // We pass a small context note (not marketing, not spam).
   let memoryContextNote = "";
   if (isEmkaFetchRequest) {
     memoryContextNote =
-      "If you need to fetch Emka from the app (sheet), you may say one short line: 'Daj mi chwilę — pobieram Twoją Emkę z aplikacji.' Only for that.";
+      "If you need to fetch Emka from the app or sheet, you may say one short line: 'Daj mi chwilę — pobieram Twoją Emkę z aplikacji.' Only for that.";
   }
 
   const messages = [
@@ -524,10 +569,10 @@ Rules:
         },
         body: JSON.stringify({
           model: MODEL,
-          temperature: 0.55,
-          max_tokens: 180,
-          presence_penalty: 0.25,
-          frequency_penalty: 0.2,
+          temperature: 0.45,
+          max_tokens: 220,
+          presence_penalty: 0.2,
+          frequency_penalty: 0.15,
           messages,
         }),
       },
@@ -548,10 +593,7 @@ Rules:
       data?.choices?.[0]?.message?.content?.trim() || "Jestem tutaj.";
 
     // ===== SAVE to Google Sheet ONLY when EmkaOps are allowed =====
-    // - For normal chat: no saves (fast).
-    // - For Emka chat or explicit fetch: allow saving reflection lines.
     if (allowEmkaOps) {
-      // Save assistant message (light) with short timeout (never block user)
       try {
         await fetchWithTimeout(
           MEMORY_URL,
@@ -568,6 +610,8 @@ Rules:
                 openai_ms: tOpenaiMs,
                 mem_fetch_ms: memFetchMs,
                 mem_fetch_ok: memFetchOk,
+                in_checkup: inCheckup,
+                emka_step: emkaCurrentStep,
               },
             }),
           },
@@ -575,7 +619,6 @@ Rules:
         );
       } catch (_) {}
 
-      // Save daily reflection only if emitted
       if (assistantReply.includes("[REFLECTION]")) {
         const line = assistantReply
           .split("\n")
@@ -605,12 +648,11 @@ Rules:
         }
       }
 
-      // If Q8 was asked (best-effort): store last_q8_date to prevent repeats
-      // (We detect it loosely by presence of "Q8" or a known Q8 phrasing; you can tighten later)
       const maybeQ8 =
         assistantReply.toLowerCase().includes("q8") ||
         assistantReply.toLowerCase().includes("który obszar") ||
-        assistantReply.toLowerCase().includes("na ile") && assistantReply.toLowerCase().includes("obciąża");
+        (assistantReply.toLowerCase().includes("na ile") &&
+          assistantReply.toLowerCase().includes("obciąża"));
 
       if (hasEmkaToday && !q8AskedToday && maybeQ8) {
         try {
@@ -631,7 +673,6 @@ Rules:
       }
     }
 
-    // Return also tiny debug timings (optional). You can remove later.
     return json(200, {
       reply: assistantReply,
       debug: {
@@ -643,6 +684,8 @@ Rules:
         q8AskedToday,
         memFetchOk,
         memFetchMs,
+        emkaChatOngoing,
+        emkaCurrentStep,
         openaiMs: nowMs() - tOpenai0,
       },
     });

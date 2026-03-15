@@ -13,7 +13,7 @@ exports.handler = async function (event) {
   const MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
 
   const MEMORY_URL =
-    "https://script.google.com/macros/s/AKfycbzAS9gvvriYvCxyI8ziAn-ZD0rBaIpT3JTi8-qQN4UJzxKDQ6q8nMZrFHE_lKHh8G7DNw/exec";
+    "https://script.google.com/macros/s/AKfycbyOF4MS_VE1JMFcIs6PZVkOz3JgNL4BdAADMvhzog3VojcLuaMIe-729oNJqvt9bmqC/exec";
 
   if (!OPENAI_API_KEY) {
     return json(500, { reply: "Missing OPENAI_API_KEY." });

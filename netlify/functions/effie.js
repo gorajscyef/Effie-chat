@@ -1,12 +1,17 @@
 // netlify/functions/effie.js
-// Effie v2.8 — FAST by default, Google Sheet memory ONLY on explicit Emka/Memory actions
-// Core rules:
+// Effie v2.8.1 — privacy guardrails only
+// Core rules unchanged:
 // - Default chat = NO Google Sheet fetch/save (fast).
 // - Emka can be done in the APP (preferred) OR in chat if user asks.
 // - Fetch Emka/Memory from Google Sheet ONLY when user explicitly requests it (or when in Emka chat mode).
 // - Reflection + Pattern logic ONLY when EmkaOps are active.
 // - Allowed to say "please wait" ONLY for Emka fetch/Memory actions.
 // - OpenAI model configurable via env OPENAI_MODEL (default gpt-4o-mini).
+//
+// PRIVACY FIX:
+// - user_id is REQUIRED (no shared fallback user)
+// - client can force fresh session with meta.resetHistory = true
+// - when resetHistory is true, backend ignores client history entirely
 
 exports.handler = async function (event) {
   const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -79,21 +84,31 @@ exports.handler = async function (event) {
       if (typeof parsed.message === "string" && parsed.message.trim().length) {
         userMessage = parsed.message.trim();
       }
-      if (Array.isArray(parsed.history)) history = parsed.history;
-      if (parsed.meta && typeof parsed.meta === "object") meta = parsed.meta;
+      if (parsed.meta && typeof parsed.meta === "object") {
+        meta = parsed.meta;
+      }
+      if (Array.isArray(parsed.history)) {
+        history = parsed.history;
+      }
     }
   }
 
-  const userId = meta?.user_id || "default_user";
-  const hasTalkedToday = meta?.hasTalkedToday === true;
+  const userId = typeof meta?.user_id === "string" ? meta.user_id.trim() : "";
+  if (!userId) {
+    return json(400, { reply: "Missing user_id." });
+  }
 
+  const hasTalkedToday = meta?.hasTalkedToday === true;
+  const shouldIgnoreClientHistory = meta?.resetHistory === true;
+
+  // prefer client-provided YYYY-MM-DD
   const todayKey =
     typeof meta?.today === "string" && /^\d{4}-\d{2}-\d{2}$/.test(meta.today)
       ? meta.today
       : new Date().toISOString().slice(0, 10);
 
-  // ===== CLEAN HISTORY =====
-  const cleanedHistory = (history || [])
+  // ===== CLEAN HISTORY (client memory) =====
+  const cleanedHistory = (shouldIgnoreClientHistory ? [] : (history || []))
     .filter(
       (m) =>
         m &&
@@ -621,6 +636,7 @@ Rules:
                 mem_fetch_ok: memFetchOk,
                 in_checkup: inCheckup,
                 emka_step: emkaCurrentStep,
+                reset_history: shouldIgnoreClientHistory,
               },
             }),
           },
@@ -695,6 +711,7 @@ Rules:
         memFetchMs,
         emkaChatOngoing,
         emkaCurrentStep,
+        resetHistory: shouldIgnoreClientHistory,
         openaiMs: nowMs() - tOpenai0,
       },
     });

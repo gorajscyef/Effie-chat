@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Effie Voice Test</title>
+<style>
+:root{--bg:#000;--gold:#cdae75;--muted:rgba(205,174,117,.7)}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:var(--bg);color:var(--gold);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;display:grid;place-items:center;padding:24px}.card{width:min(560px,100%);text-align:center}.orb{width:190px;height:190px;border-radius:50%;margin:0 auto 30px;background:radial-gradient(circle at 30% 25%,#ffd978 0 8%,#d08a00 28%,#3a1832 58%,#0b2b75 78%,#020817 100%);box-shadow:0 0 50px rgba(205,174,117,.18);transition:transform .25s ease,box-shadow .25s ease}.orb.live{transform:scale(1.04);box-shadow:0 0 70px rgba(205,174,117,.38)}h1{font-weight:500;letter-spacing:.04em}.status{min-height:26px;color:var(--muted);margin:12px 0 22px}button{border:1px solid var(--gold);background:var(--gold);color:#111;border-radius:999px;padding:14px 24px;font-size:17px;font-weight:700;cursor:pointer}button.secondary{background:transparent;color:var(--gold);margin-left:10px}button:disabled{opacity:.5;cursor:not-allowed}.note{font-size:13px;line-height:1.5;color:rgba(205,174,117,.55);margin-top:24px}
+</style>
+</head>
+<body>
+<main class="card">
+  <div id="orb" class="orb"></div>
+  <h1>Effie — Voice Test</h1>
+  <div id="status" class="status">Ready to connect.</div>
+  <button id="startBtn">Start talking</button>
+  <button id="stopBtn" class="secondary" disabled>Stop</button>
+  <audio id="remoteAudio" autoplay></audio>
+  <div class="note">Temporary test page. It does not change the existing Effie chat, Emka or memory.</div>
+</main>
+<script>
+const startBtn=document.getElementById('startBtn');
+const stopBtn=document.getElementById('stopBtn');
+const statusEl=document.getElementById('status');
+const remoteAudio=document.getElementById('remoteAudio');
+const orb=document.getElementById('orb');
+let pc=null,stream=null,dc=null;
+function status(t){statusEl.textContent=t}
+async function start(){
+  startBtn.disabled=true; status('Creating secure Effie session…');
+  try{
+    const secretRes=await fetch('/.netlify/functions/realtime-session',{method:'POST'});
+    if(!secretRes.ok) throw new Error('Session endpoint returned '+secretRes.status);
+    const secretData=await secretRes.json();
+    const ephemeralKey=secretData?.value || secretData?.client_secret?.value;
+    if(!ephemeralKey) throw new Error('No temporary client secret returned');
+
+    pc=new RTCPeerConnection();
+    pc.ontrack=e=>{remoteAudio.srcObject=e.streams[0];};
+    pc.onconnectionstatechange=()=>{
+      if(pc?.connectionState==='connected'){status('Connected. Just talk to Effie.');orb.classList.add('live');stopBtn.disabled=false;}
+      if(['failed','disconnected','closed'].includes(pc?.connectionState)){orb.classList.remove('live');}
+    };
+
+    stream=await navigator.mediaDevices.getUserMedia({audio:true});
+    stream.getTracks().forEach(track=>pc.addTrack(track,stream));
+
+    dc=pc.createDataChannel('oai-events');
+    dc.onopen=()=>status('Connected. Just talk to Effie.');
+    dc.onmessage=e=>{
+      try{
+        const evt=JSON.parse(e.data);
+        if(evt.type==='input_audio_buffer.speech_started') status('Effie is listening…');
+        if(evt.type==='response.audio.done' || evt.type==='response.done') status('Connected. Just talk to Effie.');
+        if(evt.type==='error') console.error('Realtime error',evt);
+      }catch{}
+    };
+
+    const offer=await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    const sdpRes=await fetch('https://api.openai.com/v1/realtime/calls',{
+      method:'POST',
+      body:offer.sdp,
+      headers:{Authorization:'Bearer '+ephemeralKey,'Content-Type':'application/sdp'}
+    });
+    if(!sdpRes.ok) throw new Error('Realtime call returned '+sdpRes.status+': '+await sdpRes.text());
+    const answer={type:'answer',sdp:await sdpRes.text()};
+    await pc.setRemoteDescription(answer);
+  }catch(err){
+    console.error(err);status('Could not connect: '+err.message);startBtn.disabled=false;stop();
+  }
+}
+function stop(){
+  try{dc?.close()}catch{}; try{pc?.close()}catch{}; stream?.getTracks().forEach(t=>t.stop());
+  pc=null;dc=null;stream=null;remoteAudio.srcObject=null;orb.classList.remove('live');
+  stopBtn.disabled=true;startBtn.disabled=false;if(!statusEl.textContent.startsWith('Could not'))status('Stopped.');
+}
+startBtn.addEventListener('click',start); stopBtn.addEventListener('click',stop);
+</script>
+</body>
+</html>

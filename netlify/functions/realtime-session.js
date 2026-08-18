@@ -6,14 +6,29 @@ exports.handler = async function (event) {
   const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
   const REALTIME_MODEL = process.env.OPENAI_REALTIME_MODEL || "gpt-realtime-2.1";
 
+  const corsHeaders = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+  };
+
   const json = (statusCode, body) => ({
     statusCode,
     headers: {
       "Content-Type": "application/json",
       "Cache-Control": "no-store",
+      ...corsHeaders,
     },
     body: JSON.stringify(body),
   });
+
+  if (event.httpMethod === "OPTIONS") {
+    return {
+      statusCode: 204,
+      headers: corsHeaders,
+      body: "",
+    };
+  }
 
   if (event.httpMethod !== "POST") {
     return json(405, { error: "Method not allowed" });
@@ -72,8 +87,6 @@ exports.handler = async function (event) {
       });
     }
 
-    // Return only the temporary client secret/session payload from OpenAI.
-    // The permanent OPENAI_API_KEY never leaves Netlify.
     return json(200, data);
   } catch (err) {
     console.error("Realtime session function crash:", err);

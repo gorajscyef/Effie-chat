@@ -6,7 +6,7 @@ const crypto = require("crypto");
 
 const RATE_LIMIT_WINDOW_MS = 60 * 1000;
 const RATE_LIMIT_MAX_REQUESTS = 10;
-const MEMORY_TIMEOUT_MS = 3000;
+const MEMORY_TIMEOUT_MS = 8000;
 const MEMORY_URL =
   "https://script.google.com/macros/s/AKfycbyOF4MS_VE1JMFcIs6PZVkOz3JgNL4BdAADMvhzog3VojcLuaMIe-729oNJqvt9bmqC/exec";
 const ID_PATTERN = /^ef_(?:account_)?[A-Za-z0-9_-]{20,200}$/;
@@ -86,7 +86,7 @@ async function fetchMemory(userId) {
 
   try {
     const url = new URL(MEMORY_URL);
-    url.searchParams.set("action", "getMemory");
+    url.searchParams.set("action", "getContext");
     url.searchParams.set("user_id", userId);
 
     const response = await fetch(url, {
@@ -96,7 +96,7 @@ async function fetchMemory(userId) {
     if (!response.ok) throw new Error(`Memory returned ${response.status}`);
 
     const data = await response.json();
-    return data?.ok && data?.memory ? data.memory : null;
+    return data?.ok && data?.context ? { context: data.context } : null;
   } catch (err) {
     console.warn("Voice memory unavailable:", err?.message || err);
     return null;

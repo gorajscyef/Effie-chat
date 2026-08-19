@@ -16,7 +16,7 @@
   <div id="status" class="status">Ready to connect.</div>
   <button id="startBtn">Start talking</button>
   <button id="stopBtn" class="secondary" disabled>Stop</button>
-  <audio id="remoteAudio" autoplay></audio>
+  <audio id="remoteAudio" autoplay playsinline></audio>
   <div class="note">Temporary test page. It does not change the existing Effie chat, Emka or memory.</div>
 </main>
 <script>
@@ -25,58 +25,111 @@ const stopBtn=document.getElementById('stopBtn');
 const statusEl=document.getElementById('status');
 const remoteAudio=document.getElementById('remoteAudio');
 const orb=document.getElementById('orb');
-let pc=null,stream=null,dc=null;
+const REQUEST_TIMEOUT_MS=15000;
+const CONNECTION_TIMEOUT_MS=20000;
+let pc=null,stream=null,dc=null,connectionTimer=null,isStopping=false;
 function status(t){statusEl.textContent=t}
+function getUserId(){
+  const key='effie_user_id_v1';
+  let id=localStorage.getItem(key);
+  if(!id){
+    id=crypto.randomUUID?.() || 'effie_'+Date.now()+'_'+Math.random().toString(36).slice(2);
+    localStorage.setItem(key,id);
+  }
+  return id;
+}
+async function fetchWithTimeout(url,options={},timeoutMs=REQUEST_TIMEOUT_MS){
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),timeoutMs);
+  try{return await fetch(url,{...options,signal:controller.signal})}
+  finally{clearTimeout(timer)}
+}
+function friendlyError(err){
+  if(err?.name==='NotAllowedError') return 'Microphone access was not allowed.';
+  if(err?.name==='NotFoundError') return 'No microphone was found.';
+  if(err?.name==='AbortError') return 'The connection took too long. Please try again.';
+  return err?.message || 'Unknown connection error.';
+}
 async function start(){
+  if(pc) return;
   startBtn.disabled=true; status('Creating secure Effie session…');
   try{
-    const secretRes=await fetch('/.netlify/functions/realtime-session',{method:'POST'});
-    if(!secretRes.ok) throw new Error('Session endpoint returned '+secretRes.status);
+    const secretRes=await fetchWithTimeout('/.netlify/functions/realtime-session',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({user_id:getUserId()})
+    });
+    if(!secretRes.ok){
+      const details=await secretRes.json().catch(()=>({}));
+      throw new Error(details.error || 'Session endpoint returned '+secretRes.status);
+    }
     const secretData=await secretRes.json();
     const ephemeralKey=secretData?.value || secretData?.client_secret?.value;
     if(!ephemeralKey) throw new Error('No temporary client secret returned');
 
     pc=new RTCPeerConnection();
-    pc.ontrack=e=>{remoteAudio.srcObject=e.streams[0];};
+    pc.ontrack=e=>{
+      remoteAudio.srcObject=e.streams[0];
+      remoteAudio.play().catch(()=>status('Tap Start talking again to enable audio.'));
+    };
     pc.onconnectionstatechange=()=>{
-      if(pc?.connectionState==='connected'){status('Connected. Just talk to Effie.');orb.classList.add('live');stopBtn.disabled=false;}
-      if(['failed','disconnected','closed'].includes(pc?.connectionState)){orb.classList.remove('live');}
+      const state=pc?.connectionState;
+      if(state==='connected'){
+        clearTimeout(connectionTimer);connectionTimer=null;
+        status('Connected. Just talk to Effie.');orb.classList.add('live');stopBtn.disabled=false;
+      }
+      if(['failed','disconnected','closed'].includes(state) && !isStopping){
+        stop('Connection ended. Tap Start talking to reconnect.');
+      }
     };
 
-    stream=await navigator.mediaDevices.getUserMedia({audio:true});
+    stream=await navigator.mediaDevices.getUserMedia({
+      audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}
+    });
     stream.getTracks().forEach(track=>pc.addTrack(track,stream));
 
     dc=pc.createDataChannel('oai-events');
     dc.onopen=()=>status('Connected. Just talk to Effie.');
+    dc.onerror=()=>status('The Effie audio connection encountered an error.');
     dc.onmessage=e=>{
       try{
         const evt=JSON.parse(e.data);
         if(evt.type==='input_audio_buffer.speech_started') status('Effie is listening…');
         if(evt.type==='response.audio.done' || evt.type==='response.done') status('Connected. Just talk to Effie.');
-        if(evt.type==='error') console.error('Realtime error',evt);
+        if(evt.type==='error'){
+          console.error('Realtime error',evt);
+          status('Effie encountered an audio error. Please reconnect.');
+        }
       }catch{}
     };
 
     const offer=await pc.createOffer();
     await pc.setLocalDescription(offer);
-    const sdpRes=await fetch('https://api.openai.com/v1/realtime/calls',{
+    const sdpRes=await fetchWithTimeout('https://api.openai.com/v1/realtime/calls',{
       method:'POST',
       body:offer.sdp,
       headers:{Authorization:'Bearer '+ephemeralKey,'Content-Type':'application/sdp'}
     });
-    if(!sdpRes.ok) throw new Error('Realtime call returned '+sdpRes.status+': '+await sdpRes.text());
+    if(!sdpRes.ok) throw new Error('Realtime call returned '+sdpRes.status);
     const answer={type:'answer',sdp:await sdpRes.text()};
     await pc.setRemoteDescription(answer);
+    connectionTimer=setTimeout(()=>{
+      if(pc?.connectionState!=='connected') stop('Connection timed out. Tap Start talking to try again.');
+    },CONNECTION_TIMEOUT_MS);
   }catch(err){
-    console.error(err);status('Could not connect: '+err.message);startBtn.disabled=false;stop();
+    console.error(err);stop('Could not connect: '+friendlyError(err));
   }
 }
-function stop(){
+function stop(message='Stopped.'){
+  isStopping=true;
+  clearTimeout(connectionTimer);connectionTimer=null;
   try{dc?.close()}catch{}; try{pc?.close()}catch{}; stream?.getTracks().forEach(t=>t.stop());
   pc=null;dc=null;stream=null;remoteAudio.srcObject=null;orb.classList.remove('live');
-  stopBtn.disabled=true;startBtn.disabled=false;if(!statusEl.textContent.startsWith('Could not'))status('Stopped.');
+  stopBtn.disabled=true;startBtn.disabled=false;status(message);
+  isStopping=false;
 }
-startBtn.addEventListener('click',start); stopBtn.addEventListener('click',stop);
+startBtn.addEventListener('click',start); stopBtn.addEventListener('click',()=>stop());
+window.addEventListener('pagehide',()=>stop());
 </script>
 </body>
 </html>

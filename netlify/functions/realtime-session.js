@@ -2,14 +2,88 @@
 // Effie 2.0 — isolated Talk to Effie / Realtime layer.
 // IMPORTANT: This file does not modify effie.js, Emka, or existing memory logic.
 
+const crypto = require("crypto");
+
+const RATE_LIMIT_WINDOW_MS = 60 * 1000;
+const RATE_LIMIT_MAX_REQUESTS = 10;
+const requestLog = new Map();
+
+function getAllowedOrigins() {
+  const configured = String(process.env.EFFIE_ALLOWED_ORIGINS || "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+  return new Set([
+    "https://ef-egofriendly.com",
+    "https://www.ef-egofriendly.com",
+    ...configured,
+  ]);
+}
+
+function getRequestOrigin(event) {
+  return String(event.headers?.origin || event.headers?.Origin || "").trim();
+}
+
+function isAllowedOrigin(event, origin) {
+  if (!origin) return true;
+  if (getAllowedOrigins().has(origin)) return true;
+
+  try {
+    const requestHost = String(
+      event.headers?.host || event.headers?.Host || event.headers?.["x-forwarded-host"] || ""
+    ).split(",")[0].trim();
+    return Boolean(requestHost) && new URL(origin).host === requestHost;
+  } catch {
+    return false;
+  }
+}
+
+function getClientIp(event) {
+  return String(
+    event.headers?.["x-nf-client-connection-ip"] ||
+    event.headers?.["client-ip"] ||
+    event.headers?.["x-forwarded-for"] ||
+    "unknown"
+  ).split(",")[0].trim();
+}
+
+function isRateLimited(key) {
+  const now = Date.now();
+  const recent = (requestLog.get(key) || []).filter(
+    (timestamp) => now - timestamp < RATE_LIMIT_WINDOW_MS
+  );
+  recent.push(now);
+  requestLog.set(key, recent);
+
+  if (requestLog.size > 500) {
+    for (const [storedKey, timestamps] of requestLog.entries()) {
+      if (!timestamps.some((timestamp) => now - timestamp < RATE_LIMIT_WINDOW_MS)) {
+        requestLog.delete(storedKey);
+      }
+    }
+  }
+
+  return recent.length > RATE_LIMIT_MAX_REQUESTS;
+}
+
+function safetyIdentifier(userId) {
+  const value = String(userId || "anonymous").trim().slice(0, 200) || "anonymous";
+  return crypto.createHash("sha256").update(value).digest("hex");
+}
+
 exports.handler = async function (event) {
   const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
   const REALTIME_MODEL = process.env.OPENAI_REALTIME_MODEL || "gpt-realtime-2.1";
+  const REALTIME_VOICE = process.env.OPENAI_REALTIME_VOICE || "marin";
+  const origin = getRequestOrigin(event);
+  const originAllowed = isAllowedOrigin(event, origin);
 
   const corsHeaders = {
-    "Access-Control-Allow-Origin": "*",
+    ...(origin && originAllowed ? { "Access-Control-Allow-Origin": origin } : {}),
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
+    "Vary": "Origin",
   };
 
   const json = (statusCode, body) => ({
@@ -22,6 +96,10 @@ exports.handler = async function (event) {
     body: JSON.stringify(body),
   });
 
+  if (!originAllowed) {
+    return json(403, { error: "Origin not allowed" });
+  }
+
   if (event.httpMethod === "OPTIONS") {
     return { statusCode: 204, headers: corsHeaders, body: "" };
   }
@@ -33,6 +111,20 @@ exports.handler = async function (event) {
   if (!OPENAI_API_KEY) {
     return json(500, { error: "Missing OPENAI_API_KEY" });
   }
+
+  let requestBody = {};
+  try {
+    requestBody = event.body ? JSON.parse(event.body) : {};
+  } catch {
+    return json(400, { error: "Invalid JSON body" });
+  }
+
+  const clientIp = getClientIp(event);
+  if (isRateLimited(`${clientIp}:${origin || "no-origin"}`)) {
+    return json(429, { error: "Too many session requests. Please wait a moment." });
+  }
+
+  const userSafetyId = safetyIdentifier(requestBody.user_id);
 
   const VOICE_PERSONALITY = `
 You are Effie — the Ego Friendly Companion.
@@ -82,13 +174,18 @@ This Realtime layer is voice-only for now.
 Do not start Emka, Pattern Mirror, memory retrieval, or memory-saving workflows in this version. Those systems will be connected separately after the voice layer is stable.
 `.trim();
 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 12000);
+
   try {
     const response = await fetch("https://api.openai.com/v1/realtime/client_secrets", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${OPENAI_API_KEY}`,
         "Content-Type": "application/json",
+        "OpenAI-Safety-Identifier": userSafetyId,
       },
+      signal: controller.signal,
       body: JSON.stringify({
         session: {
           type: "realtime",
@@ -99,6 +196,9 @@ Do not start Emka, Pattern Mirror, memory retrieval, or memory-saving workflows 
               turn_detection: {
                 type: "server_vad"
               }
+            },
+            output: {
+              voice: REALTIME_VOICE
             }
           }
         }
@@ -117,13 +217,18 @@ Do not start Emka, Pattern Mirror, memory retrieval, or memory-saving workflows 
       console.error("OpenAI Realtime client secret error:", response.status, data);
       return json(response.status, {
         error: "Could not create Realtime client secret",
-        details: data,
       });
     }
 
     return json(200, data);
   } catch (err) {
+    if (err?.name === "AbortError") {
+      console.error("Realtime session request timed out");
+      return json(504, { error: "Realtime session request timed out" });
+    }
     console.error("Realtime session function crash:", err);
     return json(500, { error: "Realtime session server error" });
+  } finally {
+    clearTimeout(timeout);
   }
 };

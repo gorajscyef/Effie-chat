@@ -19,6 +19,7 @@
   <audio id="remoteAudio" autoplay playsinline></audio>
   <div class="note">Temporary test page. It does not change the existing Effie chat, Emka or memory.</div>
 </main>
+<script src="/effie-identity.js"></script>
 <script>
 const startBtn=document.getElementById('startBtn');
 const stopBtn=document.getElementById('stopBtn');
@@ -30,13 +31,7 @@ const CONNECTION_TIMEOUT_MS=20000;
 let pc=null,stream=null,dc=null,connectionTimer=null,isStopping=false;
 function status(t){statusEl.textContent=t}
 function getUserId(){
-  const key='effie_user_id_v1';
-  let id=localStorage.getItem(key);
-  if(!id){
-    id=crypto.randomUUID?.() || 'effie_'+Date.now()+'_'+Math.random().toString(36).slice(2);
-    localStorage.setItem(key,id);
-  }
-  return id;
+  return window.EffieIdentity.getUserId();
 }
 async function fetchWithTimeout(url,options={},timeoutMs=REQUEST_TIMEOUT_MS){
   const controller=new AbortController();

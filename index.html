@@ -242,6 +242,7 @@ env(safe-area-inset-left);
 </div>
 </div>
 
+<script src="/effie-identity.js"></script>
 <script defer>
 
 const MEMORY_URL="https://script.google.com/macros/s/AKfycbzAS9gvvriYvCxyI8ziAn-ZD0rBaIpT3JTi8-qQN4UJzxKDQ6q8nMZrFHE_lKHh8G7DNw/exec"
@@ -252,18 +253,7 @@ const sendBtn=document.getElementById("sendBtn")
 
 let busy=false
 
-const STORAGE_USER_ID_KEY="effie_user_id_v1"
-
-function getOrCreateUserId(){
-let id=localStorage.getItem(STORAGE_USER_ID_KEY)
-if(!id){
-id="ef_"+crypto.randomUUID()
-localStorage.setItem(STORAGE_USER_ID_KEY,id)
-}
-return id
-}
-
-const USER_ID=getOrCreateUserId()
+const USER_ID=window.EffieIdentity.getUserId()
 
 const STORAGE_HISTORY_KEY="effie_history_v1"
 const STORAGE_LASTDATE_KEY="effie_last_date_v1"
